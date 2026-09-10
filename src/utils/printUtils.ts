@@ -253,13 +253,6 @@ export function generateQrPosterHtml(params: {
         <li>يشترط التواجد داخل مقر العمل للتأكيد عبر نظام تحديد المواقع (GPS).</li>
       </ol>
     </div>
-
-    <div class="footer-meta">
-      نطاق الموقع المسموح به: ${allowedRadiusMeters} متر • GPS Verified
-    </div>
-    <div class="portal-link">
-      ${portalUrl}
-    </div>
   </div>
 </body>
 </html>`;

@@ -45,6 +45,7 @@ export const TodayDashboard: React.FC<TodayDashboardProps> = ({
   const [manualActionType, setManualActionType] = useState<'check_in' | 'check_out'>('check_in');
   const [manualTime, setManualTime] = useState<string>(getCurrentTimeString().slice(0, 5));
   const [manualNotes, setManualNotes] = useState<string>('تسجيل يدوي بواسطة الإدارة');
+  const [recordToDelete, setRecordToDelete] = useState<{ id: string; name: string } | null>(null);
 
   // Today's date string
   const today = getTodayDateString();
@@ -637,11 +638,7 @@ export const TodayDashboard: React.FC<TodayDashboardProps> = ({
                               {rec && onDeleteRecord && (
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    if (window.confirm(`هل أنت متأكد من مسح بصمة وسجل اليوم للموظف "${emp.name}"؟`)) {
-                                      onDeleteRecord(rec.id);
-                                    }
-                                  }}
+                                  onClick={() => setRecordToDelete({ id: rec.id, name: emp.name })}
                                   title="حذف حركة اليوم"
                                   className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-200"
                                 >
@@ -747,6 +744,46 @@ export const TodayDashboard: React.FC<TodayDashboardProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Record Confirmation Modal */}
+      {recordToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 text-center animate-in fade-in zoom-in-95">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            <h3 className="font-bold text-slate-900 text-base mb-1">
+              تأكيد مسح تسجيل اليوم
+            </h3>
+            <p className="text-xs text-slate-600 mb-4 leading-relaxed">
+              هل أنت متأكد من مسح حركة وبصمة اليوم للموظف <span className="font-bold text-slate-900">"{recordToDelete.name}"</span>؟
+            </p>
+
+            <div className="flex items-center justify-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => setRecordToDelete(null)}
+                className="px-4 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-semibold text-xs"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeleteRecord) {
+                    onDeleteRecord(recordToDelete.id);
+                  }
+                  setRecordToDelete(null);
+                }}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-sm text-xs"
+              >
+                نعم، مسح السجل
+              </button>
+            </div>
           </div>
         </div>
       )}

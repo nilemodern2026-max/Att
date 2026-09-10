@@ -375,11 +375,6 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
               <li>لا يمكن تسجيل حضور أو خروج أكثر من مرة في اليوم الواحد.</li>
             </ul>
           </div>
-
-          {/* Footer Note */}
-          <div className="text-[10px] text-slate-400 font-mono">
-            نطاق التحقق المسموح: {settings.location.allowedRadiusMeters} متر • GPS Verified
-          </div>
         </div>
 
         {/* Copy Link helper for Admin */}
