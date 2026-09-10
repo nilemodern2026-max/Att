@@ -10,28 +10,63 @@ import {
   Building2, 
   MapPin, 
   ShieldCheck, 
-  ExternalLink 
+  ExternalLink,
+  Globe,
+  Settings,
+  RotateCcw,
+  Sparkles,
+  Eye,
+  X,
+  AlertCircle
 } from 'lucide-react';
 import { SystemSettings } from '../types';
+import { generateQrPosterHtml, printHtmlDocument } from '../utils/printUtils';
 
 interface QrCodeStationProps {
   settings: SystemSettings;
   onOpenEmployeePortal: () => void;
+  onSaveSettings?: (settings: SystemSettings) => void;
 }
 
 export const QrCodeStation: React.FC<QrCodeStationProps> = ({
   settings,
   onOpenEmployeePortal,
+  onSaveSettings,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [copied, setCopied] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
+  
+  // Custom Cloudflare domain configuration state
+  const [isEditingDomain, setIsEditingDomain] = useState(false);
+  const [customDomainInput, setCustomDomainInput] = useState(settings.customCloudflareDomain || '');
+  const [savedDomainNotice, setSavedDomainNotice] = useState(false);
 
-  // Target Portal URL: current origin + URL parameter so scanning phone opens right into employee portal
-  const portalUrl = typeof window !== 'undefined' 
-    ? `${window.location.origin}${window.location.pathname}?portal=1` 
-    : 'https://ais-pre-y2jk6zluucwdfano6awvzy-116027320757.europe-west1.run.app?portal=1';
+  // Print helper modal state
+  const [showPrintModal, setShowPrintModal] = useState(false);
 
+  // Detected origin
+  const detectedOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+
+  // Determine effective Portal URL:
+  // If user entered a custom Cloudflare URL, use it; otherwise use currently detected origin
+  const getCleanPortalUrl = () => {
+    const rawDomain = settings.customCloudflareDomain?.trim();
+    let base = rawDomain || detectedOrigin || 'https://ais-pre-y2jk6zluucwdfano6awvzy-116027320757.europe-west1.run.app';
+    
+    // Ensure protocol
+    if (!base.startsWith('http://') && !base.startsWith('https://')) {
+      base = 'https://' + base;
+    }
+    
+    // Remove trailing slash
+    base = base.replace(/\/+$/, '');
+    return `${base}/?portal=1`;
+  };
+
+  const portalUrl = getCleanPortalUrl();
+
+  // Generate QR Code onto canvas
   useEffect(() => {
     if (canvasRef.current) {
       QRCode.toCanvas(
@@ -72,21 +107,70 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
     link.click();
   };
 
-  // Trigger Print
+  // Trigger Print directly + show helper modal
   const handlePrint = () => {
-    window.print();
+    const posterHtml = generateQrPosterHtml({
+      companyName: settings.location.companyName,
+      locationName: settings.location.locationName,
+      qrDataUrl: qrDataUrl || (canvasRef.current ? canvasRef.current.toDataURL('image/png') : ''),
+      allowedRadiusMeters: settings.location.allowedRadiusMeters,
+      portalUrl: portalUrl,
+    });
+
+    // Send to printer via hidden iframe
+    printHtmlDocument(posterHtml, `لافتة_${settings.location.companyName}`);
+    setShowPrintModal(true);
   };
+
+  // Save custom Cloudflare domain
+  const handleSaveDomain = () => {
+    if (!onSaveSettings) return;
+    const cleaned = customDomainInput.trim().replace(/\/+$/, '');
+    const updatedSettings: SystemSettings = {
+      ...settings,
+      customCloudflareDomain: cleaned,
+    };
+    onSaveSettings(updatedSettings);
+    setSavedDomainNotice(true);
+    setTimeout(() => setSavedDomainNotice(false), 2500);
+    setIsEditingDomain(false);
+  };
+
+  // Reset to auto-detected domain
+  const handleResetToAuto = () => {
+    if (!onSaveSettings) return;
+    setCustomDomainInput('');
+    const updatedSettings: SystemSettings = {
+      ...settings,
+      customCloudflareDomain: '',
+    };
+    onSaveSettings(updatedSettings);
+    setSavedDomainNotice(true);
+    setTimeout(() => setSavedDomainNotice(false), 2500);
+    setIsEditingDomain(false);
+  };
+
+  const isUsingCustom = Boolean(settings.customCloudflareDomain?.trim());
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-            محطة رمز QR للطباعة وتثبيت نقطة الحضور
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+            <span>محطة رمز QR للطباعة وتثبيت نقطة الحضور</span>
+            {isUsingCustom ? (
+              <span className="text-[11px] bg-sky-100 text-sky-800 font-medium px-2 py-0.5 rounded-full">
+                رابط كلاود فلير مخصص
+              </span>
+            ) : (
+              <span className="text-[11px] bg-emerald-100 text-emerald-800 font-medium px-2 py-0.5 rounded-full">
+                كشف تلقائي لنطاق الموقع
+              </span>
+            )}
           </h2>
           <p className="text-sm text-slate-500 mt-1">
-            اطبع هذا الكود وضعه عند مدخل الشركة أو الاستقبال ليمسحه الموظفون بهواتفهم لتسجيل الدخول والخروج.
+            اطبع هذا الرمز وضعه عند مدخل الشركة أو الاستقبال ليمسحه الموظفون بهواتفهم لتسجيل الدخول والخروج.
           </p>
         </div>
 
@@ -95,27 +179,150 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
           <button
             id="print-qr-btn"
             onClick={handlePrint}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-slate-900 hover:bg-slate-800 text-white shadow-xs transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl bg-slate-900 hover:bg-slate-800 text-white shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
           >
-            <Printer className="w-4 h-4" />
-            <span>طباعة اللافتة</span>
+            <Printer className="w-4 h-4 text-emerald-400" />
+            <span>طباعة اللافتة الورقية</span>
           </button>
           <button
             id="download-qr-btn"
             onClick={handleDownload}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all"
           >
             <Download className="w-4 h-4" />
-            <span>تنزيل صورة الرمز</span>
+            <span>تنزيل صورة الرمز (PNG)</span>
+          </button>
+          <button
+            onClick={() => window.open(portalUrl, '_blank')}
+            className="inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl bg-teal-50 text-teal-800 hover:bg-teal-100 border border-teal-200 transition-colors"
+            title="فتح الرابط في تبويب جديد كما يراه الموظف على هاتفه تماماً"
+          >
+            <ExternalLink className="w-4 h-4" />
+            <span>معاينة شاشة الموظف (تبويب جديد)</span>
           </button>
           <button
             onClick={onOpenEmployeePortal}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 transition-colors"
+            className="inline-flex items-center gap-2 px-3 py-2.5 text-xs sm:text-sm font-semibold rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+            title="التبديل إلى شاشة الموظف مباشرة"
           >
-            <ExternalLink className="w-4 h-4" />
-            <span>فتح شاشة الموظف للتجربة</span>
+            <Smartphone className="w-4 h-4" />
+            <span>عرض شاشة الموظف</span>
           </button>
         </div>
+      </div>
+
+      {/* Security Guarantee Banner: Employee Isolation */}
+      <div className="bg-emerald-950 text-white rounded-2xl p-4 sm:p-5 border border-emerald-800/80 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30 mt-0.5 sm:mt-0">
+            <ShieldCheck className="w-5 h-5 text-emerald-400" />
+          </div>
+          <div>
+            <h3 className="font-bold text-sm sm:text-base text-emerald-200 flex items-center gap-2">
+              <span>عزل تام ومحمي: الموظف لا يرى لوحة الإدارة نهائياً</span>
+              <span className="text-[10px] bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-full font-extrabold">
+                مؤمن ومفعل ✓
+              </span>
+            </h3>
+            <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+              عند مسح رمز الـ QR بالهاتف، يفتح المتصفح صفحة تسجيل الحضور والانصراف للموظف فقط. تم إخفاء شريط التنقل ولوحة التحكم وقوائم الموظفين والإعدادات تماماً عن الموظف.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Cloudflare Domain Sync & Configuration Banner */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-800 print:hidden space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30">
+              <Globe className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm sm:text-base text-slate-100">
+                  ربط وتوافق رمز QR مع كلاود فلير (Cloudflare Pages)
+                </span>
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-mono border border-emerald-500/30">
+                  جاهز 100%
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-0.5">
+                {isUsingCustom 
+                  ? 'تم قفل الرمز ليعمل مباشرة برابط كلاود فلير المخصص الذي أدخلته.' 
+                  : 'يتعرف النظام تلقائياً على رابط كلاود فلير عند فتح الموقع منه. يمكنك أيضاً كتابة رابط كلاود فلير يدوياً لتوليد الرمز وطباعته فوراً.'}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setIsEditingDomain(!isEditingDomain)}
+            className="self-start sm:self-center inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold text-slate-100 transition-colors border border-white/10"
+          >
+            <Settings className="w-3.5 h-3.5" />
+            <span>{isEditingDomain ? 'إغلاق الإعداد' : 'تعديل رابط كلاود فلير'}</span>
+          </button>
+        </div>
+
+        {/* Current Encoded URL Bar */}
+        <div className="bg-black/30 backdrop-blur-xs rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border border-white/5">
+          <div className="flex items-center gap-2 overflow-hidden text-xs">
+            <span className="text-slate-400 shrink-0 font-medium">الرابط المشفر في الـ QR:</span>
+            <span className="font-mono text-emerald-400 truncate select-all" dir="ltr">
+              {portalUrl}
+            </span>
+          </div>
+          <button
+            onClick={handleCopy}
+            className="self-end sm:self-auto shrink-0 inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-600/30 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/30 transition-colors"
+          >
+            {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+            <span>{copied ? 'تم النسخ' : 'نسخ الرابط'}</span>
+          </button>
+        </div>
+
+        {/* Domain Editor Form (if toggled) */}
+        {isEditingDomain && (
+          <div className="pt-2 border-t border-white/10 space-y-2">
+            <label className="block text-xs font-semibold text-slate-200">
+              أدخل رابط مشروعك على Cloudflare Pages (أو رابط النطاق الخاص بك):
+            </label>
+            <div className="flex flex-col sm:flex-row items-stretch gap-2">
+              <input
+                type="text"
+                value={customDomainInput}
+                onChange={(e) => setCustomDomainInput(e.target.value)}
+                placeholder="مثال: https://nilemodern.pages.dev"
+                dir="ltr"
+                className="flex-1 px-3 py-2 text-xs font-mono rounded-lg bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:outline-hidden focus:border-emerald-500"
+              />
+              <button
+                onClick={handleSaveDomain}
+                className="px-4 py-2 text-xs font-bold rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 transition-colors"
+              >
+                حفظ وتحديث رمز الـ QR
+              </button>
+              {isUsingCustom && (
+                <button
+                  onClick={handleResetToAuto}
+                  className="px-3 py-2 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors flex items-center justify-center gap-1"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>استعادة التلقائي</span>
+                </button>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-400">
+              * بمجرد الضغط على (حفظ)، سيعاد رسم رمز الـ QR فورياً ليوجه أي هاتف يقوم بمسحه إلى رابط كلاود فلير الخاص بك مباشرة.
+            </p>
+          </div>
+        )}
+
+        {savedDomainNotice && (
+          <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-300 text-xs font-bold text-center border border-emerald-500/30">
+            تم حفظ الرابط وتحديث رمز الـ QR بنجاح!
+          </div>
+        )}
       </div>
 
       {/* Printable Poster Container */}
@@ -190,6 +397,102 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Print Confirmation & Options Modal */}
+      {showPrintModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 text-right animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                  <Printer className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">أمر طباعة اللافتة</h3>
+                  <p className="text-xs text-slate-500">تم تجهيز لافتة الـ QR للطباعة الورقية</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowPrintModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-xs text-emerald-900 space-y-2">
+              <div className="flex items-center gap-2 font-bold text-emerald-800">
+                <Sparkles className="w-4 h-4" />
+                <span>تم إرسال أمر الطباعة إلى متصفحك!</span>
+              </div>
+              <p className="text-slate-600 leading-relaxed">
+                إذا لم تظهر نافذة الطابعة تلقائياً بسبب سياسة حظر النوافذ في المتصفح، يمكنك استخدام أحد الخيارات الفورية التالية:
+              </p>
+            </div>
+
+            <div className="space-y-2 pt-1">
+              <button
+                onClick={() => {
+                  const posterHtml = generateQrPosterHtml({
+                    companyName: settings.location.companyName,
+                    locationName: settings.location.locationName,
+                    qrDataUrl: qrDataUrl,
+                    allowedRadiusMeters: settings.location.allowedRadiusMeters,
+                    portalUrl: portalUrl,
+                  });
+                  printHtmlDocument(posterHtml);
+                }}
+                className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors"
+              >
+                <Printer className="w-4 h-4 text-emerald-400" />
+                <span>إعادة إرسال أمر الطباعة الآن</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  handleDownload();
+                  setShowPrintModal(false);
+                }}
+                className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                <span>تنزيل صورة الرمز PNG (لطباعتها من أي جهاز أو طابعة)</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  const posterHtml = generateQrPosterHtml({
+                    companyName: settings.location.companyName,
+                    locationName: settings.location.locationName,
+                    qrDataUrl: qrDataUrl,
+                    allowedRadiusMeters: settings.location.allowedRadiusMeters,
+                    portalUrl: portalUrl,
+                  });
+                  const win = window.open('', '_blank');
+                  if (win) {
+                    win.document.open();
+                    win.document.write(posterHtml);
+                    win.document.close();
+                  }
+                }}
+                className="w-full py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors"
+              >
+                <Eye className="w-4 h-4" />
+                <span>فتح اللافتة في نافذة مستقلة للمعاينة أو الحفظ PDF</span>
+              </button>
+            </div>
+
+            <div className="border-t border-slate-100 pt-3 flex justify-end">
+              <button
+                onClick={() => setShowPrintModal(false)}
+                className="px-4 py-1.5 text-xs text-slate-500 hover:text-slate-800 font-medium"
+              >
+                تم، إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

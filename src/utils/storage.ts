@@ -26,6 +26,8 @@ export const DEFAULT_SETTINGS: SystemSettings = {
   },
   allowManualAdminOverride: true,
   autoSaveEmployeeCode: true,
+  customCloudflareDomain: '',
+  adminPin: '1694375',
 };
 
 // Default sample employees with name and fingerprint code
@@ -247,9 +249,11 @@ export function getStoredSettings(): SystemSettings {
       return DEFAULT_SETTINGS;
     }
     const parsed = JSON.parse(raw);
+    const pin = (!parsed.adminPin || parsed.adminPin === '1234') ? '1694375' : parsed.adminPin;
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
+      adminPin: pin,
       location: { ...DEFAULT_SETTINGS.location, ...(parsed.location || {}) },
       hours: { ...DEFAULT_SETTINGS.hours, ...(parsed.hours || {}) },
     };

@@ -88,4 +88,6 @@ export interface SystemSettings {
   hours: WorkHoursSettings;
   allowManualAdminOverride: boolean;
   autoSaveEmployeeCode: boolean;
+  customCloudflareDomain?: string; // رابط مخصص لكلاود فلير أو نطاق الموقع
+  adminPin?: string; // رمز مرور لوحة الإدارة
 }

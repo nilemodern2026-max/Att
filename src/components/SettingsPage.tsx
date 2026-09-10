@@ -407,6 +407,31 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 </p>
               </div>
             </div>
+
+            {/* Admin PIN Protection */}
+            <div className="pt-3 border-t border-slate-100">
+              <label className="block font-bold text-slate-800 mb-1">
+                رمز مرور لوحة الإدارة (Admin PIN):
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  value={formData.adminPin || '1694375'}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      adminPin: e.target.value,
+                    }))
+                  }
+                  dir="ltr"
+                  placeholder="1694375"
+                  className="w-40 px-3 py-2 border border-slate-300 rounded-lg text-slate-900 bg-white font-mono font-bold text-center"
+                />
+                <span className="text-xs text-slate-500">
+                  * هذا الرمز يحمي لوحة الإدارة من دخول الموظفين عند مسح الـ QR أو فتح رابط البوابة.
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 

@@ -1,4 +1,6 @@
 import { AttendanceRecord } from '../types';
+import { generateAttendanceReportHtml, printHtmlDocument } from './printUtils';
+import { getStoredSettings } from './storage';
 
 /**
  * Translates status to clear Arabic label
@@ -76,8 +78,28 @@ export function exportRecordsToCSV(records: AttendanceRecord[], filename = 'سج
 }
 
 /**
- * Trigger print dialog with clean styling
+ * Trigger print dialog with clean, formatted A4 attendance report
  */
-export function printAttendanceReport() {
-  window.print();
+export function printAttendanceReport(records?: AttendanceRecord[], dateRangeText?: string) {
+  const settings = getStoredSettings();
+  const currentRecords = records || [];
+
+  const stats = {
+    total: currentRecords.length,
+    onTime: currentRecords.filter((r) => r.status === 'present').length,
+    checkedOut: currentRecords.filter((r) => r.status === 'checked_out').length,
+    late: currentRecords.filter((r) => r.status === 'late_with_permission' || r.status === 'early_with_permission').length,
+    pending: currentRecords.filter((r) => r.status === 'pending_permission').length,
+    absent: currentRecords.filter((r) => r.status === 'absent' || r.status === 'rejected_permission').length,
+  };
+
+  const reportHtml = generateAttendanceReportHtml({
+    records: currentRecords,
+    companyName: settings.location.companyName,
+    locationName: settings.location.locationName,
+    dateRangeText,
+    stats,
+  });
+
+  printHtmlDocument(reportHtml, `تقرير_${settings.location.companyName}`);
 }

@@ -10,7 +10,7 @@ import { HistoryLogs } from './components/HistoryLogs';
 import { EmployeesManagement } from './components/EmployeesManagement';
 import { SettingsPage } from './components/SettingsPage';
 import { QrCodeStation } from './components/QrCodeStation';
-import { EmployeePortalModal } from './components/EmployeePortalModal';
+import { EmployeePortalPage } from './components/EmployeePortalPage';
 
 import { Employee, AttendanceRecord, SystemSettings } from './types';
 import { 
@@ -28,21 +28,24 @@ export default function App() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [settings, setSettings] = useState<SystemSettings>(getStoredSettings());
-  const [isEmployeePortalOpen, setIsEmployeePortalOpen] = useState(false);
+
+  // Check if opened via QR code scan (e.g. ?portal=1, ?mode=portal, or #portal)
+  const isInitiallyPortal = typeof window !== 'undefined' && (() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    return (
+      urlParams.get('portal') === '1' ||
+      urlParams.get('mode') === 'portal' ||
+      window.location.hash === '#portal'
+    );
+  })();
+
+  const [isPortalMode, setIsPortalMode] = useState<boolean>(isInitiallyPortal);
 
   // Initialize data on mount
   useEffect(() => {
     setEmployees(getStoredEmployees());
     setRecords(getStoredRecords());
     setSettings(getStoredSettings());
-
-    // Check if opened via QR code scan (e.g. ?portal=1)
-    if (typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('portal') === '1' || urlParams.get('mode') === 'portal') {
-        setIsEmployeePortalOpen(true);
-      }
-    }
 
     // Listen for storage updates across tabs/windows
     const handleDataChange = () => {
@@ -59,6 +62,26 @@ export default function App() {
       window.removeEventListener('storage', handleDataChange);
     };
   }, []);
+
+  // Switch between Portal Mode and Admin Mode
+  const handleSwitchToAdmin = () => {
+    setIsPortalMode(false);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('portal');
+      url.searchParams.delete('mode');
+      window.history.replaceState({}, '', url.pathname);
+    }
+  };
+
+  const handleSwitchToPortal = () => {
+    setIsPortalMode(true);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('portal', '1');
+      window.history.replaceState({}, '', url.toString());
+    }
+  };
 
   // Today's pending permissions count for notification badge
   const today = getTodayDateString();
@@ -136,6 +159,21 @@ export default function App() {
     saveSettings(newSettings);
   };
 
+  // If in Employee Portal mode (via QR code scan or employee link), 
+  // render ONLY the employee portal interface!
+  // The employee NEVER sees the admin dashboard, navbar, or settings!
+  if (isPortalMode) {
+    return (
+      <EmployeePortalPage
+        employees={employees}
+        records={records}
+        settings={settings}
+        onRecordSuccess={handleRecordSuccessFromPortal}
+        onSwitchToAdmin={handleSwitchToAdmin}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-['Cairo',sans-serif]">
       {/* Top Navigation */}
@@ -143,7 +181,7 @@ export default function App() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         pendingCount={pendingPermissionsCount}
-        onOpenEmployeePortal={() => setIsEmployeePortalOpen(true)}
+        onOpenEmployeePortal={handleSwitchToPortal}
         companyName={settings.location.companyName}
       />
 
@@ -157,7 +195,7 @@ export default function App() {
             onUpdateRecord={handleUpdateRecord}
             onAddManualRecord={handleAddManualRecord}
             onDeleteRecord={handleDeleteRecord}
-            onOpenEmployeePortal={() => setIsEmployeePortalOpen(true)}
+            onOpenEmployeePortal={handleSwitchToPortal}
           />
         )}
 
@@ -188,20 +226,11 @@ export default function App() {
         {activeTab === 'qr' && (
           <QrCodeStation
             settings={settings}
-            onOpenEmployeePortal={() => setIsEmployeePortalOpen(true)}
+            onOpenEmployeePortal={handleSwitchToPortal}
+            onSaveSettings={handleSaveSettings}
           />
         )}
       </main>
-
-      {/* Employee Attendance Self-Portal Modal (Simulates scanning QR or opens directly) */}
-      <EmployeePortalModal
-        isOpen={isEmployeePortalOpen}
-        onClose={() => setIsEmployeePortalOpen(false)}
-        employees={employees}
-        records={records}
-        settings={settings}
-        onRecordSuccess={handleRecordSuccessFromPortal}
-      />
 
       {/* Printable Report Header for Browser Print Dialog */}
       <div className="hidden print:block text-center p-6 border-b border-slate-300">

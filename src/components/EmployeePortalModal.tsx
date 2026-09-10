@@ -52,7 +52,6 @@ export const EmployeePortalModal: React.FC<EmployeePortalModalProps> = ({
   const [gpsDistance, setGpsDistance] = useState<number | null>(null);
   const [isWithinGeoRadius, setIsWithinGeoRadius] = useState<boolean | null>(null);
   const [gpsError, setGpsError] = useState<string>('');
-  const [useSimulatedInsideOffice, setUseSimulatedInsideOffice] = useState<boolean>(false);
 
   // Permission Flow State (when outside working hours)
   const [requiresPermission, setRequiresPermission] = useState<boolean>(false);
@@ -91,15 +90,8 @@ export const EmployeePortalModal: React.FC<EmployeePortalModalProps> = ({
   const alreadyCheckedIn = !!todayRecord?.checkInTime;
   const alreadyCheckedOut = !!todayRecord?.checkOutTime;
 
-  // Live GPS Distance Verification
-  const verifyLocation = async () => {
-    if (useSimulatedInsideOffice) {
-      setGpsDistance(15);
-      setIsWithinGeoRadius(true);
-      setGpsError('');
-      return true;
-    }
-
+  // Live GPS Distance Verification (runs in the background)
+  const verifyLocation = async (): Promise<{ ok: boolean; error?: string }> => {
     setIsVerifyingGps(true);
     setGpsError('');
     try {
@@ -113,25 +105,27 @@ export const EmployeePortalModal: React.FC<EmployeePortalModalProps> = ({
       setIsWithinGeoRadius(isInside);
 
       if (!isInside) {
-        setGpsError(
-          `أنت على مسافة (${formatDistance(distance)}) من مقر العمل، والحد الأقصى المسموح به هو (${settings.location.allowedRadiusMeters} متر). لا يمكن تسجيل الحضور إلا داخل مقر العمل!`
-        );
-        return false;
+        const msg = `أنت على مسافة (${formatDistance(distance)}) من مقر العمل، والحد الأقصى المسموح به هو (${settings.location.allowedRadiusMeters} متر). لا يمكن تسجيل الحضور إلا داخل مقر العمل!`;
+        setGpsError(msg);
+        return { ok: false, error: msg };
       }
-      return true;
+      return { ok: true };
     } catch (err: any) {
-      setGpsError(err?.message || 'تعذر تحديد الموقع الجغرافي. يرجى تفعيل GPS.');
+      const msg =
+        err?.message ||
+        'تعذر تحديد الموقع الجغرافي. يرجى تفعيل الـ GPS والسماح بالوصول لموقعك للتأكد من تواجدك بمقر العمل.';
+      setGpsError(msg);
       setIsWithinGeoRadius(false);
-      return false;
+      return { ok: false, error: msg };
     } finally {
       setIsVerifyingGps(false);
     }
   };
 
-  // Perform Initial GPS check when opening or switching
+  // Perform Initial GPS check silently in background when opening
   useEffect(() => {
     verifyLocation();
-  }, [useSimulatedInsideOffice]);
+  }, []);
 
   // Handle Form Submission
   const handleProceedRegistration = async (e: React.FormEvent) => {
@@ -192,16 +186,16 @@ export const EmployeePortalModal: React.FC<EmployeePortalModalProps> = ({
       }
     }
 
-    // 3. Check GPS Geolocation bounds:
+    // 3. Check GPS Geolocation bounds in background:
     // "لا يسمح له بالتسجيل الا في نطاق الاحداثيات المحدد له"
     if (settings.location.enableGpsStrictValidation) {
-      const isLocationOk = await verifyLocation();
-      if (!isLocationOk) {
+      const geoCheck = await verifyLocation();
+      if (!geoCheck.ok) {
         setSubmissionResult({
           success: false,
           title: 'خارج النطاق الجغرافي لمقر العمل',
           message:
-            gpsError ||
+            geoCheck.error ||
             `لا يسمح بالتسجيل خارج نطاق المقر المحدد (${settings.location.allowedRadiusMeters} متر).`,
           type: 'error',
         });
@@ -251,7 +245,7 @@ export const EmployeePortalModal: React.FC<EmployeePortalModalProps> = ({
     }
 
     // 6. Build the attendance record
-    const distanceRecorded = gpsDistance ?? (useSimulatedInsideOffice ? 15 : 0);
+    const distanceRecorded = gpsDistance ?? 0;
     const coordsObj = {
       latitude: settings.location.latitude,
       longitude: settings.location.longitude,
@@ -516,64 +510,7 @@ export const EmployeePortalModal: React.FC<EmployeePortalModalProps> = ({
               )}
             </div>
 
-            {/* Step 3: Geolocation GPS Verification Status */}
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4 text-emerald-600" />
-                  <span>التحقق من الموقع الجغرافي (GPS)</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={verifyLocation}
-                  disabled={isVerifyingGps}
-                  className="text-xs font-semibold text-emerald-700 hover:text-emerald-900 flex items-center gap-1"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isVerifyingGps ? 'animate-spin' : ''}`} />
-                  <span>إعادة الفحص</span>
-                </button>
-              </div>
-
-              {isVerifyingGps ? (
-                <div className="text-xs text-slate-500 flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-full border-2 border-emerald-600 border-t-transparent animate-spin" />
-                  <span>جارٍ فحص إحداثيات GPS لهاتفك ومقارنتها بنطاق العمل...</span>
-                </div>
-              ) : isWithinGeoRadius ? (
-                <div className="p-2.5 bg-emerald-100/70 border border-emerald-200 rounded-xl text-xs text-emerald-900 font-medium flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
-                  <span>
-                    أنت داخل نطاق العمل المسموح به! المسافة: ({gpsDistance !== null ? formatDistance(gpsDistance) : 'مؤكد'}) • الحد المسموح: {settings.location.allowedRadiusMeters}م.
-                  </span>
-                </div>
-              ) : (
-                <div className="p-2.5 bg-rose-100/80 border border-rose-200 rounded-xl text-xs text-rose-900 font-medium flex items-start gap-2">
-                  <XCircle className="w-4 h-4 text-rose-700 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-bold block">أنت خارج نطاق المقر المحدد:</span>
-                    <span>{gpsError || `المسافة المحسوبة (${gpsDistance ? formatDistance(gpsDistance) : 'غير معروفة'}) تفوق الحد الأقصى (${settings.location.allowedRadiusMeters} متر).`}</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Developer / Testing Location Override Toggle */}
-              <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-500">
-                <span>خاصية تجربة النظام والمحاكاة:</span>
-                <button
-                  type="button"
-                  onClick={() => setUseSimulatedInsideOffice(!useSimulatedInsideOffice)}
-                  className={`px-2 py-0.5 rounded font-bold transition-colors ${
-                    useSimulatedInsideOffice
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                  }`}
-                >
-                  {useSimulatedInsideOffice ? 'محاكاة التواجد بالمقر: مفعّلة ✓' : 'تفعيل محاكاة التواجد للتجربة'}
-                </button>
-              </div>
-            </div>
-
-            {/* Step 4: Outside Hours Permission Reason Prompt */}
+            {/* Step 3: Outside Hours Permission Reason Prompt (only shown if outside scheduled hours) */}
             {requiresPermission && (
               <div className="bg-amber-50 p-4 rounded-2xl border-2 border-amber-300 space-y-3 animate-in fade-in">
                 <div className="flex items-center gap-2 text-amber-950 font-bold text-xs sm:text-sm">
@@ -615,15 +552,29 @@ export const EmployeePortalModal: React.FC<EmployeePortalModalProps> = ({
                     : 'bg-teal-600 hover:bg-teal-700 shadow-teal-600/25 active:scale-[0.99]'
                 }`}
               >
-                <span>
-                  {requiresPermission
-                    ? 'إرسال التسجيل مع طلب الإذن للاعتماد'
-                    : selectedAction === 'check_in'
-                    ? 'تأكيد تسجيل الحضور الآن'
-                    : 'تأكيد تسجيل الانصراف الآن'}
-                </span>
-                <ArrowRight className="w-4 h-4 rotate-180" />
+                {isVerifyingGps ? (
+                  <>
+                    <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    <span>جارٍ التحقق من موقعك وتأكيد التسجيل...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>
+                      {requiresPermission
+                        ? 'إرسال التسجيل مع طلب الإذن للاعتماد'
+                        : selectedAction === 'check_in'
+                        ? 'تأكيد تسجيل الحضور الآن'
+                        : 'تأكيد تسجيل الانصراف الآن'}
+                    </span>
+                    <ArrowRight className="w-4 h-4 rotate-180" />
+                  </>
+                )}
               </button>
+
+              <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400 mt-3 font-medium">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span>نظام الحضور مؤمن بالتحقق من النطاق الجغرافي لمقر العمل (GPS)</span>
+              </div>
             </div>
           </form>
         </div>

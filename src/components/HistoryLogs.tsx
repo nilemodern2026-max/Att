@@ -109,6 +109,19 @@ export const HistoryLogs: React.FC<HistoryLogsProps> = ({ records, employees, on
     setRecordToDelete(null);
   };
 
+  // Export and Print Handlers
+  const handlePrintReport = () => {
+    let dateRangeText = 'جميع السجلات التاريخية';
+    if (startDate && endDate) {
+      dateRangeText = `من ${startDate} إلى ${endDate}`;
+    } else if (startDate) {
+      dateRangeText = `من تاريخ ${startDate}`;
+    } else if (endDate) {
+      dateRangeText = `حتى تاريخ ${endDate}`;
+    }
+    printAttendanceReport(filteredRecords, dateRangeText);
+  };
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -135,10 +148,11 @@ export const HistoryLogs: React.FC<HistoryLogsProps> = ({ records, employees, on
           </button>
           <button
             id="print-report-btn"
-            onClick={printAttendanceReport}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-slate-800 hover:bg-slate-900 text-white shadow-xs transition-colors"
+            onClick={handlePrintReport}
+            disabled={filteredRecords.length === 0}
+            className="inline-flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white shadow-xs transition-colors"
           >
-            <Printer className="w-4 h-4" />
+            <Printer className="w-4 h-4 text-emerald-400" />
             <span>طباعة التقرير</span>
           </button>
         </div>

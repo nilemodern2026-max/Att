@@ -13,7 +13,8 @@ import {
   X, 
   FileText,
   Fingerprint,
-  Trash2
+  Trash2,
+  Smartphone
 } from 'lucide-react';
 import { Employee, AttendanceRecord, SystemSettings } from '../types';
 import { getCurrentTimeString, getTodayDateString } from '../utils/storage';
@@ -226,6 +227,16 @@ export const TodayDashboard: React.FC<TodayDashboardProps> = ({
             <PlusCircle className="w-4 h-4" />
             <span>تسجيل يدوي للموظف</span>
           </button>
+          {onOpenEmployeePortal && (
+            <button
+              onClick={onOpenEmployeePortal}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 transition-colors"
+              title="التبديل إلى شاشة تسجيل الحضور كما يراها الموظف عبر الـ QR"
+            >
+              <Smartphone className="w-4 h-4" />
+              <span>شاشة الموظف (QR)</span>
+            </button>
+          )}
         </div>
       </div>
 
