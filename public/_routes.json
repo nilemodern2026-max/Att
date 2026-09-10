@@ -1,0 +1,9 @@
+{
+  "routes": [
+    {
+      "version": 1,
+      "include": ["/*"],
+      "exclude": ["/assets/*"]
+    }
+  ]
+}

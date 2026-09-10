@@ -1,0 +1,6 @@
+{
+  "name": "نظام إدارة الحضور والانصراف",
+  "description": "نظام شامل لإدارة وتوثيق حضور وانصراف الموظفين برمز QR والتحقق الجغرافي GPS وإدارة الأذونات والتقارير",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
