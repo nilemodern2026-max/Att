@@ -101,7 +101,7 @@ export function subscribeToCloudSettings(
             ...(data.hours || {}),
           },
         };
-        saveSettings(merged); // Cache locally
+        saveSettings(merged, false); // Cache locally without duplicate synthetic dispatch
         onUpdate(merged);
       } else {
         // If settings not yet in cloud, seed them with current stored settings
@@ -121,7 +121,7 @@ export function subscribeToCloudSettings(
  * Save Settings to Cloud Firestore
  */
 export async function pushSettingsToCloud(settings: SystemSettings): Promise<void> {
-  saveSettings(settings); // update local cache immediately
+  saveSettings(settings, false); // update local cache immediately
   try {
     const cleaned = sanitizeForFirestore(settings);
     await setDoc(SETTINGS_DOC_REF, cleaned, { merge: true });

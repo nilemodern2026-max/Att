@@ -86,8 +86,8 @@ export default function App() {
     if (initialLocalEmps.length > 0) {
       initialLocalEmps.forEach((emp) => pushEmployeeToCloud(emp).catch(() => {}));
     }
-    const initialLocalSettings = getStoredSettings();
-    pushSettingsToCloud(initialLocalSettings).catch(() => {});
+    // Recover any local unsynced records to cloud
+    syncUnsyncedLocalRecordsToCloud().catch(() => {});
 
     // Recover any local unsynced records to cloud
     syncUnsyncedLocalRecordsToCloud().catch(() => {});
@@ -255,10 +255,10 @@ export default function App() {
   };
 
   // Handlers for Settings
-  const handleSaveSettings = (newSettings: SystemSettings) => {
+  const handleSaveSettings = async (newSettings: SystemSettings): Promise<void> => {
     setSettings(newSettings);
-    saveSettings(newSettings);
-    pushSettingsToCloud(newSettings).catch(console.error);
+    saveSettings(newSettings, false);
+    await pushSettingsToCloud(newSettings);
   };
 
   // If in Employee Portal mode (via QR code scan or employee link), 

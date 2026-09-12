@@ -27,7 +27,7 @@ interface SettingsPageProps {
   settings: SystemSettings;
   employees?: Employee[];
   records?: AttendanceRecord[];
-  onSaveSettings: (settings: SystemSettings) => void;
+  onSaveSettings: (settings: SystemSettings) => Promise<void> | void;
   onUpdateEmployees?: (employees: Employee[]) => void;
 }
 
@@ -39,13 +39,27 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   onUpdateEmployees,
 }) => {
   const [formData, setFormData] = useState<SystemSettings>(settings);
+  const [latInput, setLatInput] = useState<string>(String(settings.location?.latitude ?? 30.0444));
+  const [lngInput, setLngInput] = useState<string>(String(settings.location?.longitude ?? 31.2357));
+  const [radiusInput, setRadiusInput] = useState<string>(String(settings.location?.allowedRadiusMeters ?? 200));
+
   const [isLocating, setIsLocating] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [locatingError, setLocatingError] = useState('');
   const [backupNotice, setBackupNotice] = useState<string | null>(null);
   const [isSyncingToCloud, setIsSyncingToCloud] = useState(false);
   const [cloudSyncSuccess, setCloudSyncSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Track if user has modified anything so background sync doesn't overwrite unsubmitted changes
+  const isDirtyRef = useRef(false);
+
+  const updateFormData = (updater: (prev: SystemSettings) => SystemSettings) => {
+    isDirtyRef.current = true;
+    setFormData(updater);
+  };
 
   // Manual trigger to upload all local data to Firebase Cloud
   const handleManualCloudSync = async () => {
@@ -63,10 +77,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     }
   };
 
-  // Sync formData whenever parent settings change
+  // Sync formData whenever parent settings change, ONLY if user is not actively editing
   useEffect(() => {
-    setFormData(settings);
-  }, [settings]);
+    if (!isDirtyRef.current && !isSaving) {
+      setFormData(settings);
+      setLatInput(String(settings.location?.latitude ?? 30.0444));
+      setLngInput(String(settings.location?.longitude ?? 31.2357));
+      setRadiusInput(String(settings.location?.allowedRadiusMeters ?? 200));
+    }
+  }, [settings, isSaving]);
 
   // Handle Export Backup JSON
   const handleExportBackup = () => {
@@ -136,12 +155,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     setLocatingError('');
     try {
       const res = await getCurrentLocation();
+      const newLat = Number(res.coords.latitude.toFixed(6));
+      const newLng = Number(res.coords.longitude.toFixed(6));
+      setLatInput(String(newLat));
+      setLngInput(String(newLng));
+      isDirtyRef.current = true;
       setFormData((prev) => ({
         ...prev,
         location: {
           ...prev.location,
-          latitude: Number(res.coords.latitude.toFixed(6)),
-          longitude: Number(res.coords.longitude.toFixed(6)),
+          latitude: newLat,
+          longitude: newLng,
         },
       }));
     } catch (err: any) {
@@ -151,11 +175,47 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSaveSettings(formData);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
+    setIsSaving(true);
+    setSaveError(null);
+    setSaveSuccess(null);
+
+    try {
+      const parsedLat = parseFloat(latInput);
+      const parsedLng = parseFloat(lngInput);
+      const parsedRadius = parseInt(radiusInput, 10);
+
+      const finalLat = isNaN(parsedLat) ? (formData.location.latitude || 30.0444) : parsedLat;
+      const finalLng = isNaN(parsedLng) ? (formData.location.longitude || 31.2357) : parsedLng;
+      const finalRadius = isNaN(parsedRadius) || parsedRadius < 10 ? 100 : parsedRadius;
+
+      const finalSettings: SystemSettings = {
+        ...formData,
+        location: {
+          ...formData.location,
+          latitude: finalLat,
+          longitude: finalLng,
+          allowedRadiusMeters: finalRadius,
+        },
+      };
+
+      await onSaveSettings(finalSettings);
+
+      setFormData(finalSettings);
+      setLatInput(String(finalLat));
+      setLngInput(String(finalLng));
+      setRadiusInput(String(finalRadius));
+      isDirtyRef.current = false;
+
+      setSaveSuccess(`تم حفظ وتثبيت إعدادات المنشأة والنطاق بنجاح (المسافة المسموحة: ${finalRadius} متراً) وتأكيد حفظها سحابياً ومحلياً!`);
+      setTimeout(() => setSaveSuccess(null), 5000);
+    } catch (err: any) {
+      console.error('Failed to save settings:', err);
+      setSaveError(err?.message || 'تعذر حفظ الإعدادات. يرجى التحقق من الاتصال بالإنترنت.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -171,9 +231,16 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       </div>
 
       {saveSuccess && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-sm font-bold flex items-center gap-2 animate-in fade-in">
-          <Check className="w-5 h-5 text-emerald-600" />
-          <span>تم حفظ جميع الإعدادات بنجاح وتطبيقها على النظام فوراً!</span>
+        <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-900 text-sm font-bold flex items-center gap-2 animate-in fade-in shadow-xs">
+          <Check className="w-5 h-5 text-emerald-600 shrink-0" />
+          <span>{saveSuccess}</span>
+        </div>
+      )}
+
+      {saveError && (
+        <div className="p-4 bg-rose-50 border border-rose-300 rounded-xl text-rose-900 text-sm font-bold flex items-center gap-2 animate-in fade-in shadow-xs">
+          <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+          <span>{saveError}</span>
         </div>
       )}
 
@@ -194,10 +261,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             </div>
             <button
               type="submit"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs rounded-lg border border-emerald-200 transition-colors"
+              disabled={isSaving}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50 text-emerald-800 font-bold text-xs rounded-lg border border-emerald-200 transition-colors"
             >
-              <Save className="w-3.5 h-3.5" />
-              <span>حفظ سريع لبيانات الشركة</span>
+              {isSaving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              <span>{isSaving ? 'جارٍ الحفظ...' : 'حفظ سريع لبيانات الشركة'}</span>
             </button>
           </div>
 
@@ -209,7 +277,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 required
                 value={formData.location.companyName}
                 onChange={(e) =>
-                  setFormData((prev) => ({
+                  updateFormData((prev) => ({
                     ...prev,
                     location: { ...prev.location, companyName: e.target.value },
                   }))
@@ -225,7 +293,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 required
                 value={formData.location.locationName}
                 onChange={(e) =>
-                  setFormData((prev) => ({
+                  updateFormData((prev) => ({
                     ...prev,
                     location: { ...prev.location, locationName: e.target.value },
                   }))
@@ -283,34 +351,32 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             <div>
               <label className="block font-bold text-slate-700 mb-1">خط العرض (Latitude)</label>
               <input
-                type="number"
-                step="any"
+                type="text"
+                inputMode="decimal"
                 required
-                value={formData.location.latitude}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    location: { ...prev.location, latitude: parseFloat(e.target.value) || 0 },
-                  }))
-                }
-                className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-slate-800 bg-white font-mono"
+                value={latInput}
+                onChange={(e) => {
+                  setLatInput(e.target.value);
+                  isDirtyRef.current = true;
+                }}
+                placeholder="30.0444"
+                className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-slate-800 bg-white font-mono focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
               />
             </div>
 
             <div>
               <label className="block font-bold text-slate-700 mb-1">خط الطول (Longitude)</label>
               <input
-                type="number"
-                step="any"
+                type="text"
+                inputMode="decimal"
                 required
-                value={formData.location.longitude}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    location: { ...prev.location, longitude: parseFloat(e.target.value) || 0 },
-                  }))
-                }
-                className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-slate-800 bg-white font-mono"
+                value={lngInput}
+                onChange={(e) => {
+                  setLngInput(e.target.value);
+                  isDirtyRef.current = true;
+                }}
+                placeholder="31.2357"
+                className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-slate-800 bg-white font-mono focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
               />
             </div>
 
@@ -319,21 +385,16 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               <div className="relative">
                 <input
                   type="number"
-                  min="20"
-                  max="5000"
+                  min="10"
+                  max="10000"
                   step="10"
                   required
-                  value={formData.location.allowedRadiusMeters}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      location: {
-                        ...prev.location,
-                        allowedRadiusMeters: parseInt(e.target.value, 10) || 100,
-                      },
-                    }))
-                  }
-                  className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-slate-800 bg-white font-mono font-bold"
+                  value={radiusInput}
+                  onChange={(e) => {
+                    setRadiusInput(e.target.value);
+                    isDirtyRef.current = true;
+                  }}
+                  className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-slate-800 bg-white font-mono font-bold focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                 />
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">متر</span>
               </div>
@@ -345,7 +406,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             <div>
               <p className="font-semibold text-slate-800">كيف يعمل التحقق الجغرافي؟</p>
               <p className="mt-0.5">
-                عند مسح رمز QR وتسجيل الحضور أو الانصراف، يطلب النظام إحداثيات هاتف الموظف (GPS). إذا كانت المسافة بين الموظف ومقر العمل أكبر من <strong>{formData.location.allowedRadiusMeters} متراً</strong>، يرفض النظام التسجيل فوراً ويظهر له تنبيه بأنه خارج نطاق العمل.
+                عند مسح رمز QR وتسجيل الحضور أو الانصراف، يطلب النظام إحداثيات هاتف الموظف (GPS). إذا كانت المسافة بين الموظف ومقر العمل أكبر من <strong>{radiusInput || formData.location.allowedRadiusMeters} متراً</strong>، يرفض النظام التسجيل فوراً ويظهر له تنبيه بأنه خارج نطاق العمل.
               </p>
             </div>
           </div>
@@ -356,7 +417,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               id="strict-gps-toggle"
               checked={formData.location.enableGpsStrictValidation}
               onChange={(e) =>
-                setFormData((prev) => ({
+                updateFormData((prev) => ({
                   ...prev,
                   location: {
                     ...prev.location,
@@ -396,7 +457,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     required
                     value={formData.hours.checkInStart}
                     onChange={(e) =>
-                      setFormData((prev) => ({
+                      updateFormData((prev) => ({
                         ...prev,
                         hours: { ...prev.hours, checkInStart: e.target.value },
                       }))
@@ -411,7 +472,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     required
                     value={formData.hours.checkInEnd}
                     onChange={(e) =>
-                      setFormData((prev) => ({
+                      updateFormData((prev) => ({
                         ...prev,
                         hours: { ...prev.hours, checkInEnd: e.target.value },
                       }))
@@ -441,7 +502,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     required
                     value={formData.hours.checkOutStart}
                     onChange={(e) =>
-                      setFormData((prev) => ({
+                      updateFormData((prev) => ({
                         ...prev,
                         hours: { ...prev.hours, checkOutStart: e.target.value },
                       }))
@@ -456,7 +517,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     required
                     value={formData.hours.checkOutEnd}
                     onChange={(e) =>
-                      setFormData((prev) => ({
+                      updateFormData((prev) => ({
                         ...prev,
                         hours: { ...prev.hours, checkOutEnd: e.target.value },
                       }))
@@ -504,7 +565,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 id="device-lock"
                 checked={formData.enableDeviceLock ?? true}
                 onChange={(e) =>
-                  setFormData((prev) => ({
+                  updateFormData((prev) => ({
                     ...prev,
                     enableDeviceLock: e.target.checked,
                   }))
@@ -530,7 +591,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 id="auto-save-code"
                 checked={formData.autoSaveEmployeeCode}
                 onChange={(e) =>
-                  setFormData((prev) => ({
+                  updateFormData((prev) => ({
                     ...prev,
                     autoSaveEmployeeCode: e.target.checked,
                   }))
@@ -553,7 +614,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 id="manual-override"
                 checked={formData.allowManualAdminOverride}
                 onChange={(e) =>
-                  setFormData((prev) => ({
+                  updateFormData((prev) => ({
                     ...prev,
                     allowManualAdminOverride: e.target.checked,
                   }))
@@ -580,7 +641,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   type="text"
                   value={formData.adminPin || '1694375'}
                   onChange={(e) =>
-                    setFormData((prev) => ({
+                    updateFormData((prev) => ({
                       ...prev,
                       adminPin: e.target.value,
                     }))
@@ -605,7 +666,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   type="text"
                   value={formData.customCloudflareDomain || ''}
                   onChange={(e) =>
-                    setFormData((prev) => ({
+                    updateFormData((prev) => ({
                       ...prev,
                       customCloudflareDomain: e.target.value,
                     }))
@@ -715,10 +776,20 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           <button
             type="submit"
             id="save-settings-btn"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-md shadow-emerald-600/20 transition-all hover:scale-[1.01]"
+            disabled={isSaving}
+            className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-bold text-sm rounded-xl shadow-md shadow-emerald-600/20 transition-all hover:scale-[1.01]"
           >
-            <Save className="w-4 h-4" />
-            <span>حفظ الإعدادات بالكامل</span>
+            {isSaving ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>جارٍ حفظ الإعدادات وتأكيد المزامنة السحابية...</span>
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                <span>حفظ الإعدادات بالكامل</span>
+              </>
+            )}
           </button>
         </div>
       </form>

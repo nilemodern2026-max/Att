@@ -151,9 +151,11 @@ export function getStoredSettings(): SystemSettings {
 }
 
 // Save Settings
-export function saveSettings(settings: SystemSettings): void {
+export function saveSettings(settings: SystemSettings, notify: boolean = true): void {
   localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
-  window.dispatchEvent(new Event('attendance_data_changed'));
+  if (notify) {
+    window.dispatchEvent(new Event('attendance_data_changed'));
+  }
 }
 
 // Device identification helpers for "Device Lock" anti-tampering feature

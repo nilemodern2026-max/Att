@@ -43,6 +43,10 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
   const [isEditingDomain, setIsEditingDomain] = useState(false);
   const [domainInput, setDomainInput] = useState(settings.customCloudflareDomain || '');
 
+  useEffect(() => {
+    setDomainInput(settings.customCloudflareDomain || '');
+  }, [settings.customCloudflareDomain]);
+
   // Single unified direct Cloud Portal URL - Respects custom Cloudflare domain if provided, or detected origin
   const detectedOrigin = typeof window !== 'undefined' ? window.location.origin : '';
   const portalUrl = useMemo(() => {
