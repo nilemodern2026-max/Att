@@ -9,7 +9,8 @@ import {
   Smartphone,
   AlertCircle,
   Building2,
-  CheckCircle2
+  CheckCircle2,
+  Cloud
 } from 'lucide-react';
 import { CompanyLogo } from './CompanyLogo';
 
@@ -19,6 +20,7 @@ interface NavbarProps {
   pendingCount: number;
   onOpenEmployeePortal: () => void;
   companyName: string;
+  isCloudConnected?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -27,6 +29,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   pendingCount,
   onOpenEmployeePortal,
   companyName,
+  isCloudConnected = true,
 }) => {
   const [currentTime, setCurrentTime] = useState<string>('');
   const [currentDate, setCurrentDate] = useState<string>('');
@@ -113,7 +116,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          {/* Center: Live Date & Clock */}
+          {/* Center: Live Date & Clock + Cloud Status */}
           <div className="hidden md:flex items-center gap-4 bg-slate-50 px-4 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-700">
             <div className="flex items-center gap-1.5 font-medium text-slate-600">
               <Calendar className="w-3.5 h-3.5 text-emerald-600" />
@@ -123,6 +126,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="flex items-center gap-1.5 font-bold text-slate-800 tracking-wide">
               <Clock className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
               <span dir="ltr">{currentTime}</span>
+            </div>
+            <span className="text-slate-300">|</span>
+            <div 
+              className={`flex items-center gap-1 font-bold text-[11px] px-2 py-0.5 rounded-full ${
+                isCloudConnected 
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                  : 'bg-amber-100 text-amber-800 border border-amber-200'
+              }`}
+              title={isCloudConnected ? 'متصل بقاعدة البيانات السحابية المركزية' : 'جاري الاتصال بالسحابة...'}
+            >
+              <Cloud className="w-3.5 h-3.5 text-emerald-600" />
+              <span>{isCloudConnected ? 'السحابة متصلة ومباشرة' : 'السحابة...'}</span>
             </div>
           </div>
 

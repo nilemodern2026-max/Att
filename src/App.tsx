@@ -23,13 +23,24 @@ import {
   getTodayDateString
 } from './utils/storage';
 import { checkAndApplyUrlSync } from './utils/syncUtils';
+import {
+  subscribeToCloudSettings,
+  pushSettingsToCloud,
+  subscribeToCloudEmployees,
+  pushEmployeeToCloud,
+  deleteEmployeeFromCloud,
+  subscribeToCloudRecords,
+  pushRecordToCloud,
+  deleteRecordFromCloud,
+} from './utils/firebase';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'today' | 'history' | 'employees' | 'settings' | 'qr'>('today');
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>(getStoredEmployees());
+  const [records, setRecords] = useState<AttendanceRecord[]>(getStoredRecords());
   const [settings, setSettings] = useState<SystemSettings>(getStoredSettings());
   const [syncToast, setSyncToast] = useState<{ title: string; desc: string } | null>(null);
+  const [isCloudConnected, setIsCloudConnected] = useState<boolean>(true);
 
   // Check if opened via QR code scan (e.g. ?portal=1, ?mode=portal, or #portal)
   const isInitiallyPortal = typeof window !== 'undefined' && (() => {
@@ -45,7 +56,7 @@ export default function App() {
 
   const [isPortalMode, setIsPortalMode] = useState<boolean>(isInitiallyPortal);
 
-  // Initialize data on mount + Apply Cross-Domain & QR Sync if present
+  // Initialize data on mount + Apply Cross-Domain & QR Sync if present + Real-time Cloud Subscriptions
   useEffect(() => {
     // 1. Check if URL contains sync payload from QR scan or Admin transfer
     const syncRes = checkAndApplyUrlSync();
@@ -66,11 +77,23 @@ export default function App() {
       setTimeout(() => setSyncToast(null), 5000);
     }
 
-    setEmployees(getStoredEmployees());
-    setRecords(getStoredRecords());
-    setSettings(getStoredSettings());
+    // 2. Real-time Firebase Cloud Subscriptions
+    const unsubSettings = subscribeToCloudSettings((cloudSettings) => {
+      setSettings(cloudSettings);
+      setIsCloudConnected(true);
+    }, () => setIsCloudConnected(false));
 
-    // Listen for storage updates across tabs/windows
+    const unsubEmployees = subscribeToCloudEmployees((cloudEmployees) => {
+      setEmployees(cloudEmployees);
+      setIsCloudConnected(true);
+    }, () => setIsCloudConnected(false));
+
+    const unsubRecords = subscribeToCloudRecords((cloudRecords) => {
+      setRecords(cloudRecords);
+      setIsCloudConnected(true);
+    }, () => setIsCloudConnected(false));
+
+    // Listen for storage updates across local tabs/windows as fallback
     const handleDataChange = () => {
       setEmployees(getStoredEmployees());
       setRecords(getStoredRecords());
@@ -81,6 +104,9 @@ export default function App() {
     window.addEventListener('storage', handleDataChange);
 
     return () => {
+      unsubSettings();
+      unsubEmployees();
+      unsubRecords();
       window.removeEventListener('attendance_data_changed', handleDataChange);
       window.removeEventListener('storage', handleDataChange);
     };
@@ -117,12 +143,14 @@ export default function App() {
     const updated = records.map((r) => (r.id === updatedRecord.id ? updatedRecord : r));
     setRecords(updated);
     saveRecords(updated);
+    pushRecordToCloud(updatedRecord).catch(console.error);
   };
 
   const handleAddManualRecord = (newRecord: AttendanceRecord) => {
     const updated = [newRecord, ...records];
     setRecords(updated);
     saveRecords(updated);
+    pushRecordToCloud(newRecord).catch(console.error);
   };
 
   const handleRecordSuccessFromPortal = (record: AttendanceRecord) => {
@@ -136,6 +164,7 @@ export default function App() {
     }
     setRecords(updated);
     saveRecords(updated);
+    pushRecordToCloud(record).catch(console.error);
   };
 
   // Handlers for Employees
@@ -143,20 +172,24 @@ export default function App() {
     const updated = [...employees, newEmployee];
     setEmployees(updated);
     saveEmployees(updated);
+    pushEmployeeToCloud(newEmployee).catch(console.error);
   };
 
   const handleUpdateEmployee = (updatedEmployee: Employee) => {
     const updated = employees.map((e) => (e.id === updatedEmployee.id ? updatedEmployee : e));
     setEmployees(updated);
     saveEmployees(updated);
+    pushEmployeeToCloud(updatedEmployee).catch(console.error);
 
     const updatedRecs = records.map((r) => {
       if (r.employeeId === updatedEmployee.id) {
-        return {
+        const modified = {
           ...r,
           employeeName: updatedEmployee.name,
           employeeCode: updatedEmployee.code,
         };
+        pushRecordToCloud(modified).catch(console.error);
+        return modified;
       }
       return r;
     });
@@ -168,18 +201,21 @@ export default function App() {
     const updated = employees.filter((e) => e.id !== id);
     setEmployees(updated);
     saveEmployees(updated);
+    deleteEmployeeFromCloud(id).catch(console.error);
   };
 
   const handleDeleteRecord = (id: string) => {
     const updated = records.filter((r) => r.id !== id);
     setRecords(updated);
     saveRecords(updated);
+    deleteRecordFromCloud(id).catch(console.error);
   };
 
   // Handlers for Settings
   const handleSaveSettings = (newSettings: SystemSettings) => {
     setSettings(newSettings);
     saveSettings(newSettings);
+    pushSettingsToCloud(newSettings).catch(console.error);
   };
 
   // If in Employee Portal mode (via QR code scan or employee link), 
@@ -232,6 +268,7 @@ export default function App() {
         pendingCount={pendingPermissionsCount}
         onOpenEmployeePortal={handleSwitchToPortal}
         companyName={settings.location.companyName}
+        isCloudConnected={isCloudConnected}
       />
 
       {/* Main Container */}

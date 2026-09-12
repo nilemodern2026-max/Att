@@ -1,0 +1,18 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Attendance system settings, employees and records
+    match /settings/{settingId} {
+      allow read, write: if true;
+    }
+    match /employees/{employeeId} {
+      allow read, write: if true;
+    }
+    match /attendance_records/{recordId} {
+      allow read, write: if true;
+    }
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}

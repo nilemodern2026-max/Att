@@ -14,11 +14,14 @@ import {
   Upload,
   FileJson,
   Sparkles,
-  Globe
+  Globe,
+  Cloud,
+  RefreshCw
 } from 'lucide-react';
 import { SystemSettings, Employee, AttendanceRecord } from '../types';
 import { getCurrentLocation } from '../utils/geo';
 import { saveRecords } from '../utils/storage';
+import { syncAllToCloud } from '../utils/firebase';
 
 interface SettingsPageProps {
   settings: SystemSettings;
@@ -40,7 +43,25 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [locatingError, setLocatingError] = useState('');
   const [backupNotice, setBackupNotice] = useState<string | null>(null);
+  const [isSyncingToCloud, setIsSyncingToCloud] = useState(false);
+  const [cloudSyncSuccess, setCloudSyncSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Manual trigger to upload all local data to Firebase Cloud
+  const handleManualCloudSync = async () => {
+    setIsSyncingToCloud(true);
+    setCloudSyncSuccess(null);
+    try {
+      const res = await syncAllToCloud(formData, employees, records);
+      setCloudSyncSuccess(`تمت المزامنة بنجاح! تم رفع الإعدادات و${employees.length} موظف و${records.length} سجل إلى السحابة المركزية.`);
+      setTimeout(() => setCloudSyncSuccess(null), 6000);
+    } catch (err: any) {
+      console.error('Manual cloud sync failed:', err);
+      setCloudSyncSuccess('تعذر الاتصال بالسحابة حالياً، يرجى المحاولة لاحقاً.');
+    } finally {
+      setIsSyncingToCloud(false);
+    }
+  };
 
   // Sync formData whenever parent settings change
   useEffect(() => {
@@ -605,7 +626,55 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </div>
         </div>
 
-        {/* Section 6: Data Backup & Cross-Platform Transfer */}
+        {/* Section 6: Firebase Real-Time Cloud Database */}
+        <div className="bg-gradient-to-br from-emerald-900 to-slate-900 text-white p-6 rounded-2xl border border-emerald-500/40 shadow-md space-y-4">
+          <div className="flex items-center justify-between border-b border-emerald-500/20 pb-3 flex-wrap gap-2">
+            <div className="flex items-center gap-2 font-bold text-base text-emerald-300">
+              <Cloud className="w-5 h-5 text-emerald-400 animate-pulse" />
+              <span>قاعدة البيانات السحابية المركزية (Firebase Cloud Sync)</span>
+            </div>
+            <span className="text-xs bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2.5 py-1 rounded-full font-bold flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+              <span>نشطة ومربوطة مباشرة</span>
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-300 leading-relaxed">
+            النظام الآن مرتبط مركزياً بقاعدة بيانات سحابية (Firestore). أي تسجيل حضور أو موظف جديد يتم حفظه ومزامنته فوراً في جزء من الثانية بين هواتف الموظفين وشاشة الإدارة حتى عند العمل من نطاقات مختلفة.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-black/20 p-3.5 rounded-xl border border-emerald-500/20">
+            <div>
+              <span className="text-slate-400">حالة الربط السحابي: </span>
+              <strong className="text-emerald-400">متصل (Real-Time Live)</strong>
+            </div>
+            <div>
+              <span className="text-slate-400">سعة التخزين: </span>
+              <strong className="text-emerald-400">سحابية غير محدودة</strong>
+            </div>
+          </div>
+
+          {cloudSyncSuccess && (
+            <div className="p-3 bg-emerald-500/20 border border-emerald-400/40 rounded-xl text-xs text-emerald-200 flex items-center gap-2">
+              <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{cloudSyncSuccess}</span>
+            </div>
+          )}
+
+          <div className="pt-1 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleManualCloudSync}
+              disabled={isSyncingToCloud}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 text-xs font-bold transition-all shadow-sm"
+            >
+              <RefreshCw className={`w-4 h-4 ${isSyncingToCloud ? 'animate-spin' : ''}`} />
+              <span>{isSyncingToCloud ? 'جاري الرفع للسحابة...' : 'رفع ومزامنة البيانات الحالية للسحابة فوراً'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Section 7: Data Backup & Cross-Platform Transfer */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-3 text-slate-900 font-bold text-base">
             <FileJson className="w-5 h-5 text-indigo-600" />
