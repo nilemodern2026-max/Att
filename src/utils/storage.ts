@@ -27,7 +27,7 @@ export const DEFAULT_SETTINGS: SystemSettings = {
   allowManualAdminOverride: true,
   autoSaveEmployeeCode: true,
   enableDeviceLock: true, // قفل الهاتف مفعل افتراضياً لحماية التسجيل ومنع التلاعب
-  customCloudflareDomain: 'https://att-8oz.pages.dev',
+  customCloudflareDomain: '',
   adminPin: '1694375',
 };
 
@@ -251,9 +251,7 @@ export function getStoredSettings(): SystemSettings {
     }
     const parsed = JSON.parse(raw);
     const pin = (!parsed.adminPin || parsed.adminPin === '1234') ? '1694375' : parsed.adminPin;
-    const customCloudflare = parsed.customCloudflareDomain && parsed.customCloudflareDomain.trim() !== '' 
-      ? parsed.customCloudflareDomain 
-      : 'https://att-8oz.pages.dev';
+    const customCloudflare = parsed.customCloudflareDomain?.trim() || '';
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,

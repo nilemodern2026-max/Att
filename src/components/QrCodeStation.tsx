@@ -61,11 +61,9 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
   const detectedOrigin = typeof window !== 'undefined' ? window.location.origin : '';
 
   // Determine effective Portal URL:
-  // Includes smart sync payload so ANY phone or domain scanning the QR code
-  // automatically receives the actual company name and active employees!
+  // Clean, ultra-fast and lightweight URL that works 100% on any mobile scanner
   const portalUrl = useMemo(() => {
-    const rawDomain = settings.customCloudflareDomain?.trim();
-    let base = rawDomain || detectedOrigin || 'https://ais-pre-y2jk6zluucwdfano6awvzy-116027320757.europe-west1.run.app';
+    let base = settings.customCloudflareDomain?.trim() || detectedOrigin || 'https://ais-pre-y2jk6zluucwdfano6awvzy-116027320757.europe-west1.run.app';
     
     // Ensure protocol
     if (!base.startsWith('http://') && !base.startsWith('https://')) {
@@ -75,22 +73,8 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
     // Remove trailing slash
     base = base.replace(/\/+$/, '');
     
-    // Generate sync payload containing company name, GPS coords, and employees
-    const syncPayload = createQrSyncPayload(settings, employees);
-    if (syncPayload) {
-      return `${base}/?portal=1&sync=${syncPayload}`;
-    }
     return `${base}/?portal=1`;
-  }, [
-    settings.customCloudflareDomain,
-    settings.location.companyName,
-    settings.location.locationName,
-    settings.location.latitude,
-    settings.location.longitude,
-    settings.location.allowedRadiusMeters,
-    employees,
-    detectedOrigin,
-  ]);
+  }, [settings.customCloudflareDomain, detectedOrigin]);
 
   // Determine target domain for Admin full transfer
   const effectiveDomain = settings.customCloudflareDomain?.trim() || detectedOrigin;
@@ -100,8 +84,9 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
       : '';
   }, [effectiveDomain, settings, employees, records]);
 
-  // Generate QR Code onto canvas
+  // Generate QR Code onto canvas + high-resolution PNG Data URL
   useEffect(() => {
+    // 1. Render on canvas
     if (canvasRef.current) {
       QRCode.toCanvas(
         canvasRef.current,
@@ -109,7 +94,7 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
         {
           width: 320,
           margin: 2,
-          errorCorrectionLevel: 'M',
+          errorCorrectionLevel: 'H',
           color: {
             dark: '#0f172a',
             light: '#ffffff',
@@ -117,7 +102,7 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
         },
         (error) => {
           if (error) {
-            console.error('Error generating QR code', error);
+            console.error('Error generating QR code on canvas', error);
           } else if (canvasRef.current) {
             const newUrl = canvasRef.current.toDataURL('image/png');
             setQrDataUrl((prev) => (prev !== newUrl ? newUrl : prev));
@@ -125,6 +110,25 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
         }
       );
     }
+
+    // 2. Also generate direct high-res 600px Data URL for reliable printing and downloading
+    QRCode.toDataURL(
+      portalUrl,
+      {
+        width: 600,
+        margin: 2,
+        errorCorrectionLevel: 'H',
+        color: {
+          dark: '#0f172a',
+          light: '#ffffff',
+        },
+      },
+      (error, url) => {
+        if (!error && url) {
+          setQrDataUrl(url);
+        }
+      }
+    );
   }, [portalUrl]);
 
   // Copy URL
@@ -308,14 +312,14 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
           </button>
         </div>
 
-        {/* Smart QR Sync Explanation Callout */}
+        {/* QR Code Scannability & High Speed Guarantee Callout */}
         <div className="bg-emerald-950/60 border border-emerald-500/40 rounded-xl p-3 text-xs space-y-1.5 text-emerald-100">
           <div className="flex items-center gap-2 font-bold text-emerald-300">
             <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>تقنية المزامنة الفورية التلقائية لرمز الـ QR (Smart Sync):</span>
+            <span>رمز QR فائق السرعة والدقة (Ultra-Fast & High Reliability):</span>
           </div>
           <p className="text-[11px] text-slate-300 leading-relaxed">
-            تم دمج اسم الشركة الحالي <strong className="text-white">"{settings.location.companyName}"</strong> وإحداثيات الموقع وقائمة الموظفين (<strong className="text-white">{employees.length} موظف</strong>) تلقائياً داخل الرمز. بمجرد مسح الرمز من أي هاتف عبر رابط كلاود فلير، يتم نقل وتثبيت اسم الشركة وقائمة الموظفين في الهاتف فوراً!
+            الرمز مشفر بأعلى معيار دقة وتصحيح أخطاء (Error Correction Level H) ليعمل مع أي كاميرا هاتف فوراً في أقل من ثانية، ومربوط بنطاق شركتكم <strong className="text-white">"{settings.location.companyName}"</strong> لفتح صفحة الحضور والانصراف مباشرة دون أي بطء أو تشويش.
           </p>
         </div>
 
@@ -372,15 +376,26 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
         {/* Domain Editor Form (if toggled) */}
         {isEditingDomain && (
           <div className="pt-2 border-t border-white/10 space-y-2">
-            <label className="block text-xs font-semibold text-slate-200">
-              أدخل رابط مشروعك على Cloudflare Pages (أو رابط النطاق الخاص بك):
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold text-slate-200">
+                أدخل رابط مشروعك على Cloudflare Pages (أو رابط النطاق الخاص بك):
+              </label>
+              {detectedOrigin && (
+                <button
+                  type="button"
+                  onClick={() => setCustomDomainInput(detectedOrigin)}
+                  className="text-[11px] text-amber-300 hover:text-amber-200 underline font-medium"
+                >
+                  استخدام رابط الصفحة الحالية ({detectedOrigin})
+                </button>
+              )}
+            </div>
             <div className="flex flex-col sm:flex-row items-stretch gap-2">
               <input
                 type="text"
                 value={customDomainInput}
                 onChange={(e) => setCustomDomainInput(e.target.value)}
-                placeholder="مثال: https://nilemodern.pages.dev"
+                placeholder={`مثال: ${detectedOrigin || 'https://nilemodern.pages.dev'}`}
                 dir="ltr"
                 className="flex-1 px-3 py-2 text-xs font-mono rounded-lg bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:outline-hidden focus:border-emerald-500"
               />

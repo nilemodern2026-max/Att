@@ -28,7 +28,7 @@ export interface FullAdminSyncPayload {
  */
 export function safeBase64Encode(str: string): string {
   try {
-    return btoa(unescape(encodeURIComponent(str)));
+    return encodeURIComponent(btoa(unescape(encodeURIComponent(str))));
   } catch (err) {
     console.error('Base64 encoding failed', err);
     return '';
@@ -40,7 +40,8 @@ export function safeBase64Encode(str: string): string {
  */
 export function safeBase64Decode(b64: string): string {
   try {
-    return decodeURIComponent(escape(atob(b64)));
+    const clean = decodeURIComponent(b64).replace(/ /g, '+');
+    return decodeURIComponent(escape(atob(clean)));
   } catch (err) {
     console.error('Base64 decoding failed', err);
     return '';
