@@ -22,16 +22,20 @@ import {
   saveSettings,
   getTodayDateString
 } from './utils/storage';
+import { checkAndApplyUrlSync } from './utils/syncUtils';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'today' | 'history' | 'employees' | 'settings' | 'qr'>('today');
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [settings, setSettings] = useState<SystemSettings>(getStoredSettings());
+  const [syncToast, setSyncToast] = useState<{ title: string; desc: string } | null>(null);
 
   // Check if opened via QR code scan (e.g. ?portal=1, ?mode=portal, or #portal)
   const isInitiallyPortal = typeof window !== 'undefined' && (() => {
     const urlParams = new URLSearchParams(window.location.search);
+    // If admin import is present, prioritize admin mode
+    if (urlParams.has('import_admin')) return false;
     return (
       urlParams.get('portal') === '1' ||
       urlParams.get('mode') === 'portal' ||
@@ -41,8 +45,27 @@ export default function App() {
 
   const [isPortalMode, setIsPortalMode] = useState<boolean>(isInitiallyPortal);
 
-  // Initialize data on mount
+  // Initialize data on mount + Apply Cross-Domain & QR Sync if present
   useEffect(() => {
+    // 1. Check if URL contains sync payload from QR scan or Admin transfer
+    const syncRes = checkAndApplyUrlSync();
+    if (syncRes.applied) {
+      if (syncRes.type === 'portal') {
+        setIsPortalMode(true);
+        setSyncToast({
+          title: `تمت مزامنة بيانات ${syncRes.companyName || 'الشركة'} بنجاح!`,
+          desc: `تم تحميل ${syncRes.employeeCount || 0} موظف معتمد ومطابقة نطاق المقر الجغرافي.`,
+        });
+      } else if (syncRes.type === 'admin') {
+        setIsPortalMode(false);
+        setSyncToast({
+          title: `تم نقل لوحة الإدارة إلى هذا النطاق بنجاح!`,
+          desc: `تم استيراد كافة إعدادات منشأة (${syncRes.companyName}) و${syncRes.employeeCount} موظف.`,
+        });
+      }
+      setTimeout(() => setSyncToast(null), 5000);
+    }
+
     setEmployees(getStoredEmployees());
     setRecords(getStoredRecords());
     setSettings(getStoredSettings());
@@ -164,18 +187,44 @@ export default function App() {
   // The employee NEVER sees the admin dashboard, navbar, or settings!
   if (isPortalMode) {
     return (
-      <EmployeePortalPage
-        employees={employees}
-        records={records}
-        settings={settings}
-        onRecordSuccess={handleRecordSuccessFromPortal}
-        onSwitchToAdmin={handleSwitchToAdmin}
-      />
+      <div className="relative">
+        {syncToast && (
+          <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 max-w-md w-11/12 bg-slate-900 text-white p-3.5 rounded-2xl shadow-xl border border-emerald-500/50 animate-in fade-in slide-in-from-top-3 flex items-start gap-3">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+              ✓
+            </div>
+            <div className="text-xs">
+              <div className="font-bold text-emerald-400">{syncToast.title}</div>
+              <div className="text-slate-300 mt-0.5">{syncToast.desc}</div>
+            </div>
+          </div>
+        )}
+        <EmployeePortalPage
+          employees={employees}
+          records={records}
+          settings={settings}
+          onRecordSuccess={handleRecordSuccessFromPortal}
+          onSwitchToAdmin={handleSwitchToAdmin}
+          onUpdateEmployee={handleUpdateEmployee}
+        />
+      </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-['Cairo',sans-serif]">
+      {syncToast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-lg w-11/12 bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-emerald-500/60 animate-in fade-in slide-in-from-top-4 flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 font-bold">
+            ✓
+          </div>
+          <div className="text-xs">
+            <div className="font-bold text-sm text-emerald-300">{syncToast.title}</div>
+            <div className="text-slate-300 mt-1 leading-relaxed">{syncToast.desc}</div>
+          </div>
+        </div>
+      )}
+
       {/* Top Navigation */}
       <Navbar
         activeTab={activeTab}
@@ -203,6 +252,7 @@ export default function App() {
           <HistoryLogs 
             records={records} 
             employees={employees} 
+            companyName={settings.location.companyName}
             onDeleteRecord={handleDeleteRecord} 
           />
         )}
@@ -219,13 +269,21 @@ export default function App() {
         {activeTab === 'settings' && (
           <SettingsPage
             settings={settings}
+            employees={employees}
+            records={records}
             onSaveSettings={handleSaveSettings}
+            onUpdateEmployees={(newEmps) => {
+              setEmployees(newEmps);
+              saveEmployees(newEmps);
+            }}
           />
         )}
 
         {activeTab === 'qr' && (
           <QrCodeStation
             settings={settings}
+            employees={employees}
+            records={records}
             onOpenEmployeePortal={handleSwitchToPortal}
             onSaveSettings={handleSaveSettings}
           />

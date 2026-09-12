@@ -15,16 +15,21 @@ import {
   Calendar,
   Sparkles,
   KeyRound,
-  X
+  X,
+  Smartphone,
+  ShieldAlert
 } from 'lucide-react';
 import { Employee, AttendanceRecord, SystemSettings } from '../types';
+import { CompanyLogo } from './CompanyLogo';
 import { getCurrentLocation, calculateDistanceMeters, formatDistance } from '../utils/geo';
 import { 
   getCurrentTimeString, 
   getTodayDateString, 
   isTimeWithinWindow, 
   getSavedEmployeeCode, 
-  saveEmployeeCode 
+  saveEmployeeCode,
+  getOrCreateDeviceId,
+  getDeviceName
 } from '../utils/storage';
 
 interface EmployeePortalPageProps {
@@ -33,6 +38,7 @@ interface EmployeePortalPageProps {
   settings: SystemSettings;
   onRecordSuccess: (record: AttendanceRecord) => void;
   onSwitchToAdmin?: () => void;
+  onUpdateEmployee?: (employee: Employee) => void;
 }
 
 export const EmployeePortalPage: React.FC<EmployeePortalPageProps> = ({
@@ -41,6 +47,7 @@ export const EmployeePortalPage: React.FC<EmployeePortalPageProps> = ({
   settings,
   onRecordSuccess,
   onSwitchToAdmin,
+  onUpdateEmployee,
 }) => {
   // Action State
   const [selectedAction, setSelectedAction] = useState<'check_in' | 'check_out'>('check_in');
@@ -175,6 +182,48 @@ export const EmployeePortalPage: React.FC<EmployeePortalPageProps> = ({
         type: 'error',
       });
       return;
+    }
+
+    // 1.5 Device Lock & Anti-Buddy Punching Check (ربط وقفل كود الموظف بهاتفه الشخصي)
+    if (settings.enableDeviceLock) {
+      const currentDeviceId = getOrCreateDeviceId();
+      const currentDeviceName = getDeviceName();
+
+      // فحص أ: هل هذا الهاتف مسجل ومقترن بالفعل لموظف آخر في الشركة؟
+      const conflictingEmployee = employees.find(
+        (e) => e.id !== currentEmployee.id && e.boundDeviceId && e.boundDeviceId === currentDeviceId
+      );
+
+      if (conflictingEmployee) {
+        setSubmissionResult({
+          success: false,
+          title: 'غير مسموح: الهاتف مسجل لموظف آخر',
+          message: `عفواً! هذا الهاتف مقترن بالفعل بزميلك (${conflictingEmployee.name}). يُمنع تسجيل الحضور لأكثر من موظف من نفس الهاتف منعاً للتبصيم للغير. يرجى استخدام هاتفك الشخصي.`,
+          type: 'error',
+        });
+        return;
+      }
+
+      // فحص ب: إذا كان الموظف قد ربط حسابه بهاتف سابق، هل الهاتف الحالي يطابقه؟
+      if (currentEmployee.boundDeviceId && currentEmployee.boundDeviceId !== currentDeviceId) {
+        setSubmissionResult({
+          success: false,
+          title: 'الحساب مقترن بهاتف آخر',
+          message: `عفواً يا ${currentEmployee.name}، حسابك مقفل على جهازك المسجل مسبقاً (${currentEmployee.boundDeviceName || 'هاتفك السابق'}). لا يمكنك التبصيم من جهاز آخر. إذا قمت بتغيير هاتفك، يرجى مراجعة الإدارة لفك القفل.`,
+          type: 'error',
+        });
+        return;
+      }
+
+      // فحص ج: إذا لم يكن الموظف مربوطاً بأي هاتف حتى الآن، يتم ربط وقفل هذا الهاتف له فوراً
+      if (!currentEmployee.boundDeviceId && onUpdateEmployee) {
+        onUpdateEmployee({
+          ...currentEmployee,
+          boundDeviceId: currentDeviceId,
+          boundDeviceName: currentDeviceName,
+          boundAt: new Date().toISOString(),
+        });
+      }
     }
 
     // Auto-save code for this employee's browser
@@ -359,9 +408,7 @@ export const EmployeePortalPage: React.FC<EmployeePortalPageProps> = ({
       <header className="bg-slate-900 text-white shadow-md">
         <div className="max-w-xl mx-auto px-4 py-4 sm:py-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-slate-950 flex items-center justify-center font-bold shadow-sm shadow-emerald-500/20">
-              <Building2 className="w-6 h-6 text-slate-950" />
-            </div>
+            <CompanyLogo size="md" companyName={settings.location.companyName} />
             <div>
               <span className="text-[11px] font-bold text-emerald-400 tracking-wider block">
                 بوابة الحضور والانصراف للموظف
@@ -550,13 +597,25 @@ export const EmployeePortalPage: React.FC<EmployeePortalPageProps> = ({
 
               {/* Real-time Employee Name Card */}
               {currentEmployee ? (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs flex items-center justify-between">
-                  <span className="font-bold text-emerald-950">
-                    مرحباً: {currentEmployee.name}
-                  </span>
-                  <span className="text-emerald-700 font-medium">
-                    {currentEmployee.department || 'موظف معتمد'}
-                  </span>
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-emerald-950">
+                      مرحباً: {currentEmployee.name}
+                    </span>
+                    <span className="text-emerald-700 font-medium">
+                      {currentEmployee.department || 'موظف معتمد'}
+                    </span>
+                  </div>
+                  {settings.enableDeviceLock && (
+                    <div className="flex items-center gap-1.5 text-[11px] text-emerald-800 pt-1 border-t border-emerald-200/60">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>
+                        {currentEmployee.boundDeviceId
+                          ? `حسابك مقترن ومحمي على هذا الهاتف (${currentEmployee.boundDeviceName || 'هاتفك الشخصي'})`
+                          : 'سيتم ربط وقفل كودك على هاتفك الشخصي مع أول بصمة لحمايتك'}
+                      </span>
+                    </div>
+                  )}
                 </div>
               ) : employeeCode.trim() ? (
                 <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 font-medium">

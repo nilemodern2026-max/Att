@@ -21,6 +21,9 @@ export interface Employee {
   nationalId?: string;
   joinDate?: string;
   avatar?: string;
+  boundDeviceId?: string;   // معرف الجهاز المربوط بهاتف الموظف
+  boundDeviceName?: string; // نوع المتصفح / الهاتف (مثال: iPhone Safari / Android Chrome)
+  boundAt?: string;         // تاريخ وتوقيت ربط الجهاز
 }
 
 export interface AttendanceRecord {
@@ -88,6 +91,7 @@ export interface SystemSettings {
   hours: WorkHoursSettings;
   allowManualAdminOverride: boolean;
   autoSaveEmployeeCode: boolean;
+  enableDeviceLock: boolean; // تفعيل قفل الهاتف (منع التبصيم للغير)
   customCloudflareDomain?: string; // رابط مخصص لكلاود فلير أو نطاق الموقع
   adminPin?: string; // رمز مرور لوحة الإدارة
 }

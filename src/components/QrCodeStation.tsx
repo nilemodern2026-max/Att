@@ -19,28 +19,40 @@ import {
   X,
   AlertCircle
 } from 'lucide-react';
-import { SystemSettings } from '../types';
+import { SystemSettings, Employee, AttendanceRecord } from '../types';
 import { generateQrPosterHtml, printHtmlDocument } from '../utils/printUtils';
+import { createQrSyncPayload, createAdminTransferUrl } from '../utils/syncUtils';
+import { CompanyLogo } from './CompanyLogo';
 
 interface QrCodeStationProps {
   settings: SystemSettings;
+  employees?: Employee[];
+  records?: AttendanceRecord[];
   onOpenEmployeePortal: () => void;
   onSaveSettings?: (settings: SystemSettings) => void;
 }
 
 export const QrCodeStation: React.FC<QrCodeStationProps> = ({
   settings,
+  employees = [],
+  records = [],
   onOpenEmployeePortal,
   onSaveSettings,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedTransferUrl, setCopiedTransferUrl] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   
   // Custom Cloudflare domain configuration state
   const [isEditingDomain, setIsEditingDomain] = useState(false);
   const [customDomainInput, setCustomDomainInput] = useState(settings.customCloudflareDomain || '');
   const [savedDomainNotice, setSavedDomainNotice] = useState(false);
+
+  // Sync custom domain input when settings change
+  useEffect(() => {
+    setCustomDomainInput(settings.customCloudflareDomain || '');
+  }, [settings.customCloudflareDomain]);
 
   // Print helper modal state
   const [showPrintModal, setShowPrintModal] = useState(false);
@@ -49,7 +61,8 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
   const detectedOrigin = typeof window !== 'undefined' ? window.location.origin : '';
 
   // Determine effective Portal URL:
-  // If user entered a custom Cloudflare URL, use it; otherwise use currently detected origin
+  // Includes smart sync payload so ANY phone or domain scanning the QR code
+  // automatically receives the actual company name and active employees!
   const getCleanPortalUrl = () => {
     const rawDomain = settings.customCloudflareDomain?.trim();
     let base = rawDomain || detectedOrigin || 'https://ais-pre-y2jk6zluucwdfano6awvzy-116027320757.europe-west1.run.app';
@@ -61,10 +74,22 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
     
     // Remove trailing slash
     base = base.replace(/\/+$/, '');
+    
+    // Generate sync payload containing company name, GPS coords, and employees
+    const syncPayload = createQrSyncPayload(settings, employees);
+    if (syncPayload) {
+      return `${base}/?portal=1&sync=${syncPayload}`;
+    }
     return `${base}/?portal=1`;
   };
 
   const portalUrl = getCleanPortalUrl();
+
+  // Determine target domain for Admin full transfer
+  const effectiveDomain = settings.customCloudflareDomain?.trim() || detectedOrigin;
+  const adminTransferUrl = effectiveDomain 
+    ? createAdminTransferUrl(effectiveDomain, settings, employees, records)
+    : '';
 
   // Generate QR Code onto canvas
   useEffect(() => {
@@ -73,8 +98,9 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
         canvasRef.current,
         portalUrl,
         {
-          width: 280,
+          width: 320,
           margin: 2,
+          errorCorrectionLevel: 'M',
           color: {
             dark: '#0f172a',
             light: '#ffffff',
@@ -96,6 +122,14 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
     navigator.clipboard.writeText(portalUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
+  };
+
+  // Copy Admin Transfer URL
+  const handleCopyTransferUrl = () => {
+    if (!adminTransferUrl) return;
+    navigator.clipboard.writeText(adminTransferUrl);
+    setCopiedTransferUrl(true);
+    setTimeout(() => setCopiedTransferUrl(false), 2500);
   };
 
   // Download QR as PNG
@@ -264,10 +298,21 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
           </button>
         </div>
 
+        {/* Smart QR Sync Explanation Callout */}
+        <div className="bg-emerald-950/60 border border-emerald-500/40 rounded-xl p-3 text-xs space-y-1.5 text-emerald-100">
+          <div className="flex items-center gap-2 font-bold text-emerald-300">
+            <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>تقنية المزامنة الفورية التلقائية لرمز الـ QR (Smart Sync):</span>
+          </div>
+          <p className="text-[11px] text-slate-300 leading-relaxed">
+            تم دمج اسم الشركة الحالي <strong className="text-white">"{settings.location.companyName}"</strong> وإحداثيات الموقع وقائمة الموظفين (<strong className="text-white">{employees.length} موظف</strong>) تلقائياً داخل الرمز. بمجرد مسح الرمز من أي هاتف عبر رابط كلاود فلير، يتم نقل وتثبيت اسم الشركة وقائمة الموظفين في الهاتف فوراً!
+          </p>
+        </div>
+
         {/* Current Encoded URL Bar */}
         <div className="bg-black/30 backdrop-blur-xs rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border border-white/5">
           <div className="flex items-center gap-2 overflow-hidden text-xs">
-            <span className="text-slate-400 shrink-0 font-medium">الرابط المشفر في الـ QR:</span>
+            <span className="text-slate-400 shrink-0 font-medium">الرابط المباشر في الـ QR:</span>
             <span className="font-mono text-emerald-400 truncate select-all" dir="ltr">
               {portalUrl}
             </span>
@@ -277,9 +322,42 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
             className="self-end sm:self-auto shrink-0 inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-600/30 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/30 transition-colors"
           >
             {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-            <span>{copied ? 'تم النسخ' : 'نسخ الرابط'}</span>
+            <span>{copied ? 'تم النسخ' : 'نسخ رابط الـ QR'}</span>
           </button>
         </div>
+
+        {/* Admin Sync to Cloudflare Action */}
+        {adminTransferUrl && (
+          <div className="bg-indigo-950/60 border border-indigo-500/40 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="space-y-0.5">
+              <div className="font-bold text-indigo-300 flex items-center gap-1.5">
+                <Globe className="w-4 h-4" />
+                <span>نقل لوحة التحكم والإدارة بالكامل إلى كلاود فلير</span>
+              </div>
+              <p className="text-[11px] text-slate-300">
+                إذا أردت فتح لوحة الإدارة وإضافة الموظفين مستقبلاً من رابط كلاود فلير نفسه:
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleCopyTransferUrl}
+                className="px-3 py-1.5 rounded-lg bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 border border-indigo-700/60 font-medium text-xs inline-flex items-center gap-1"
+              >
+                {copiedTransferUrl ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedTransferUrl ? 'تم نسخ الرابط' : 'نسخ رابط النقل'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => window.open(adminTransferUrl, '_blank')}
+                className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs inline-flex items-center gap-1.5 shadow-sm"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>فتح ومزامنة لوحة الإدارة هناك</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Domain Editor Form (if toggled) */}
         {isEditingDomain && (
@@ -333,8 +411,8 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
         >
           {/* Company Branding Top */}
           <div className="space-y-2">
-            <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-md shadow-emerald-200">
-              <Building2 className="w-7 h-7" />
+            <div className="flex justify-center">
+              <CompanyLogo size="lg" companyName={settings.location.companyName} />
             </div>
             <h3 className="text-xl font-extrabold text-slate-900">
               {settings.location.companyName}

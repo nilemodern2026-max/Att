@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   MapPin, 
   Clock, 
@@ -9,24 +9,105 @@ import {
   AlertCircle, 
   ShieldCheck, 
   Info,
-  HelpCircle
+  HelpCircle,
+  Download,
+  Upload,
+  FileJson,
+  Sparkles,
+  Globe
 } from 'lucide-react';
-import { SystemSettings } from '../types';
+import { SystemSettings, Employee, AttendanceRecord } from '../types';
 import { getCurrentLocation } from '../utils/geo';
+import { saveRecords } from '../utils/storage';
 
 interface SettingsPageProps {
   settings: SystemSettings;
+  employees?: Employee[];
+  records?: AttendanceRecord[];
   onSaveSettings: (settings: SystemSettings) => void;
+  onUpdateEmployees?: (employees: Employee[]) => void;
 }
 
 export const SettingsPage: React.FC<SettingsPageProps> = ({
   settings,
+  employees = [],
+  records = [],
   onSaveSettings,
+  onUpdateEmployees,
 }) => {
   const [formData, setFormData] = useState<SystemSettings>(settings);
   const [isLocating, setIsLocating] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [locatingError, setLocatingError] = useState('');
+  const [backupNotice, setBackupNotice] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Sync formData whenever parent settings change
+  useEffect(() => {
+    setFormData(settings);
+  }, [settings]);
+
+  // Handle Export Backup JSON
+  const handleExportBackup = () => {
+    try {
+      const dataToExport = {
+        exportDate: new Date().toISOString(),
+        settings: formData,
+        employees: employees,
+        records: records,
+        app: 'employee-attendance-system',
+      };
+      const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `نسخة_احتياطية_${formData.location.companyName || 'حضور_وانصراف'}_${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setBackupNotice('تم تنزيل النسخة الاحتياطية بنجاح!');
+      setTimeout(() => setBackupNotice(null), 4000);
+    } catch (err) {
+      console.error('Export failed', err);
+    }
+  };
+
+  // Handle Import Backup JSON
+  const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const parsed = JSON.parse(text);
+
+        if (parsed.settings) {
+          setFormData(parsed.settings);
+          onSaveSettings(parsed.settings);
+        }
+        if (Array.isArray(parsed.employees) && onUpdateEmployees) {
+          onUpdateEmployees(parsed.employees);
+        }
+        if (Array.isArray(parsed.records)) {
+          saveRecords(parsed.records);
+        }
+
+        setBackupNotice(`تم بنجاح استيراد بيانات (${parsed.settings?.location?.companyName || 'المنشأة'}) و${parsed.employees?.length || 0} موظف!`);
+        setSaveSuccess(true);
+        setTimeout(() => {
+          setBackupNotice(null);
+          setSaveSuccess(false);
+        }, 5000);
+      } catch (err) {
+        setBackupNotice('الملف غير صالح أو تالف. يرجى اختيار ملف JSON صحيح.');
+      }
+    };
+    reader.readAsText(file);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   // Handle Detect Current Location
   const handleDetectCurrentLocation = async () => {
@@ -75,12 +156,28 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         </div>
       )}
 
+      {backupNotice && (
+        <div className="p-4 bg-sky-50 border border-sky-200 rounded-xl text-sky-800 text-sm font-bold flex items-center gap-2 animate-in fade-in">
+          <Info className="w-5 h-5 text-sky-600" />
+          <span>{backupNotice}</span>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Section 1: Company Profile */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-3 text-slate-900 font-bold text-base">
-            <Building2 className="w-5 h-5 text-emerald-600" />
-            <span>بيانات المنشأة والمقر</span>
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2 text-slate-900 font-bold text-base">
+              <Building2 className="w-5 h-5 text-emerald-600" />
+              <span>بيانات المنشأة والمقر</span>
+            </div>
+            <button
+              type="submit"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs rounded-lg border border-emerald-200 transition-colors"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>حفظ سريع لبيانات الشركة</span>
+            </button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs sm:text-sm">
@@ -96,7 +193,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     location: { ...prev.location, companyName: e.target.value },
                   }))
                 }
-                className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-slate-800 bg-white"
+                className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-slate-800 bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
               />
             </div>
 
@@ -112,8 +209,39 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     location: { ...prev.location, locationName: e.target.value },
                   }))
                 }
-                className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-slate-800 bg-white"
+                className="w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-slate-800 bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
               />
+            </div>
+          </div>
+
+          {/* Cloudflare Pages Live Domain */}
+          <div className="pt-2 border-t border-slate-100">
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                  <Globe className="w-4 h-4 text-sky-600" />
+                  <span>رابط استضافة الموقع على كلاود فلير (Cloudflare Pages URL):</span>
+                </label>
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                  معتمد في الـ QR
+                </span>
+              </div>
+              <input
+                type="url"
+                value={formData.customCloudflareDomain || 'https://att-8oz.pages.dev'}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    customCloudflareDomain: e.target.value,
+                  }))
+                }
+                dir="ltr"
+                placeholder="https://att-8oz.pages.dev"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 bg-white font-mono text-xs font-semibold focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+              />
+              <p className="text-[11px] text-slate-500">
+                هذا الرابط يُستخدم في توليد رمز الـ QR واللافتة المطبوعة بحيث يفتح هاتف الموظف مباشرة على رابط كلاود فلير السحابي المرفوع.
+              </p>
             </div>
           </div>
         </div>
@@ -362,6 +490,32 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </div>
 
           <div className="space-y-3 text-xs sm:text-sm">
+            <div className="flex items-start gap-2 bg-emerald-50/70 p-3 rounded-xl border border-emerald-200/80">
+              <input
+                type="checkbox"
+                id="device-lock"
+                checked={formData.enableDeviceLock ?? true}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    enableDeviceLock: e.target.checked,
+                  }))
+                }
+                className="w-4 h-4 mt-0.5 text-emerald-600 rounded-sm border-slate-300"
+              />
+              <div>
+                <label htmlFor="device-lock" className="font-bold text-slate-800 cursor-pointer flex items-center gap-1.5">
+                  <span>تفعيل قفل الهاتف الذكي (Device Lock) — منع التبصيم للغير</span>
+                  <span className="text-[10px] bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full font-bold">
+                    حماية ضد التلاعب
+                  </span>
+                </label>
+                <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                  يقوم بربط وتثبيت كود الموظف بهاتفه الشخصي تلقائياً في أول بصمة، ويمنع استخدام الهاتف لتسجيل أي موظف آخر.
+                </p>
+              </div>
+            </div>
+
             <div className="flex items-start gap-2">
               <input
                 type="checkbox"
@@ -432,6 +586,46 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 </span>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Section 6: Data Backup & Cross-Platform Transfer */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+          <div className="flex items-center gap-2 border-b border-slate-100 pb-3 text-slate-900 font-bold text-base">
+            <FileJson className="w-5 h-5 text-indigo-600" />
+            <span>النسخ الاحتياطي ونقل البيانات (Backup & Transfer)</span>
+          </div>
+
+          <p className="text-xs text-slate-600 leading-relaxed">
+            يمكنك حفظ نسخة احتياطية من جميع إعدادات المنشأة، قائمة الموظفين، وسجلات الحضور في ملف JSON واستعادتها في أي وقت أو نقلها لأي جهاز أو نطاق آخر.
+          </p>
+
+          <div className="flex items-center gap-3 flex-wrap pt-1">
+            <button
+              type="button"
+              onClick={handleExportBackup}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow-xs"
+            >
+              <Download className="w-4 h-4 text-emerald-400" />
+              <span>تنزيل نسخة احتياطية كاملة (JSON)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-xs font-bold transition-colors"
+            >
+              <Upload className="w-4 h-4 text-indigo-600" />
+              <span>استيراد نسخة احتياطية (JSON)</span>
+            </button>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,application/json"
+              onChange={handleImportBackup}
+              className="hidden"
+            />
           </div>
         </div>
 

@@ -11,7 +11,10 @@ import {
   X, 
   Check, 
   AlertTriangle,
-  Power
+  Power,
+  Smartphone,
+  RotateCcw,
+  ShieldCheck
 } from 'lucide-react';
 import { Employee } from '../types';
 
@@ -44,6 +47,9 @@ export const EmployeesManagement: React.FC<EmployeesManagementProps> = ({
   // Delete Confirmation Modal State
   const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null);
 
+  // Device Lock Reset Confirmation State
+  const [deviceResetTarget, setDeviceResetTarget] = useState<Employee | null>(null);
+
   // Success Notification banner
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -52,6 +58,19 @@ export const EmployeesManagement: React.FC<EmployeesManagementProps> = ({
     setTimeout(() => {
       setNotification(null);
     }, 3500);
+  };
+
+  // Reset employee device lock
+  const handleConfirmResetDevice = () => {
+    if (!deviceResetTarget) return;
+    onUpdateEmployee({
+      ...deviceResetTarget,
+      boundDeviceId: undefined,
+      boundDeviceName: undefined,
+      boundAt: undefined,
+    });
+    showToast(`تم فك قفل هاتف الموظف (${deviceResetTarget.name}) بنجاح. سيتمكن من ربط هاتفه الجديد عند البصمة القادمة.`);
+    setDeviceResetTarget(null);
   };
 
   // Open modal to add a new employee
@@ -334,6 +353,35 @@ export const EmployeesManagement: React.FC<EmployeesManagementProps> = ({
                     {emp.code}
                   </span>
                 </div>
+
+                {/* Bound Device Status Box */}
+                <div className="bg-slate-50/80 rounded-xl p-2.5 border border-slate-200/80 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 truncate">
+                    <Smartphone className={`w-4 h-4 shrink-0 ${emp.boundDeviceId ? 'text-emerald-600' : 'text-slate-400'}`} />
+                    <span className="text-[11px] truncate">
+                      {emp.boundDeviceId ? (
+                        <span className="font-bold text-slate-800 flex items-center gap-1.5 truncate">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                          <span className="truncate">مقترن: {emp.boundDeviceName || 'هاتف شخصي'}</span>
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">لم يقترن بهاتف بعد</span>
+                      )}
+                    </span>
+                  </div>
+
+                  {emp.boundDeviceId && (
+                    <button
+                      type="button"
+                      onClick={() => setDeviceResetTarget(emp)}
+                      title="فك قفل الهاتف ليتمكن الموظف من استخدام هاتف آخر"
+                      className="shrink-0 text-[11px] font-bold text-amber-700 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded-md border border-amber-200 transition-colors inline-flex items-center gap-1"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>فك القفل</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Action Buttons: Edit, Delete, Toggle Active */}
@@ -509,6 +557,44 @@ export const EmployeesManagement: React.FC<EmployeesManagementProps> = ({
                 className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-sm text-xs"
               >
                 نعم، حذف نهائي
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Device Lock Reset Confirmation Modal */}
+      {deviceResetTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-4">
+              <Smartphone className="w-6 h-6" />
+            </div>
+
+            <h3 className="font-bold text-slate-900 text-base mb-1">
+              فك قفل هاتف الموظف
+            </h3>
+            <p className="text-xs text-slate-600 mb-2 leading-relaxed">
+              هل تريد إلغاء اقتران هاتف الموظف <span className="font-bold text-slate-900">"{deviceResetTarget.name}"</span>؟
+            </p>
+            <p className="text-[11px] text-slate-500 mb-4 bg-amber-50 p-2.5 rounded-xl border border-amber-200/60">
+              * هذا الإجراء يتيح للموظف تسجيل الحضور من هاتفه الجديد، وسيتم قفل حسابه على الجهاز الجديد فور التبصيم.
+            </p>
+
+            <div className="flex items-center justify-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => setDeviceResetTarget(null)}
+                className="px-4 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-semibold text-xs"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmResetDevice}
+                className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl shadow-sm text-xs"
+              >
+                تأكيد فك القفل
               </button>
             </div>
           </div>

@@ -26,7 +26,8 @@ export const DEFAULT_SETTINGS: SystemSettings = {
   },
   allowManualAdminOverride: true,
   autoSaveEmployeeCode: true,
-  customCloudflareDomain: '',
+  enableDeviceLock: true, // قفل الهاتف مفعل افتراضياً لحماية التسجيل ومنع التلاعب
+  customCloudflareDomain: 'https://att-8oz.pages.dev',
   adminPin: '1694375',
 };
 
@@ -250,10 +251,15 @@ export function getStoredSettings(): SystemSettings {
     }
     const parsed = JSON.parse(raw);
     const pin = (!parsed.adminPin || parsed.adminPin === '1234') ? '1694375' : parsed.adminPin;
+    const customCloudflare = parsed.customCloudflareDomain && parsed.customCloudflareDomain.trim() !== '' 
+      ? parsed.customCloudflareDomain 
+      : 'https://att-8oz.pages.dev';
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
       adminPin: pin,
+      customCloudflareDomain: customCloudflare,
+      enableDeviceLock: parsed.enableDeviceLock ?? true,
       location: { ...DEFAULT_SETTINGS.location, ...(parsed.location || {}) },
       hours: { ...DEFAULT_SETTINGS.hours, ...(parsed.hours || {}) },
     };
@@ -267,6 +273,39 @@ export function getStoredSettings(): SystemSettings {
 export function saveSettings(settings: SystemSettings): void {
   localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
   window.dispatchEvent(new Event('attendance_data_changed'));
+}
+
+// Device identification helpers for "Device Lock" anti-tampering feature
+export function getOrCreateDeviceId(): string {
+  try {
+    let deviceId = localStorage.getItem('attendance_device_id');
+    if (!deviceId) {
+      deviceId = 'dev-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 9);
+      localStorage.setItem('attendance_device_id', deviceId);
+    }
+    return deviceId;
+  } catch {
+    return 'dev-temp-' + Date.now();
+  }
+}
+
+export function getDeviceName(): string {
+  if (typeof navigator === 'undefined') return 'هاتف ذكي';
+  const ua = navigator.userAgent || '';
+  let os = 'جهاز محمول';
+  if (/iPhone/i.test(ua)) os = 'iPhone';
+  else if (/iPad/i.test(ua)) os = 'iPad';
+  else if (/Android/i.test(ua)) os = 'Android';
+  else if (/Mac/i.test(ua)) os = 'Mac';
+  else if (/Windows/i.test(ua)) os = 'Windows PC';
+
+  let browser = 'متصفح';
+  if (/CriOS|Chrome/i.test(ua)) browser = 'Chrome';
+  else if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) browser = 'Safari';
+  else if (/Firefox/i.test(ua)) browser = 'Firefox';
+  else if (/Edg/i.test(ua)) browser = 'Edge';
+
+  return `${os} • ${browser}`;
 }
 
 // Saved employee code helpers for the "حفظ الكود تلقائي مع دخوله كل مره" feature
