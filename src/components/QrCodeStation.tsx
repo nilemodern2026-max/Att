@@ -73,14 +73,9 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
     // Remove trailing slash
     base = base.replace(/\/+$/, '');
     
-    // Generate compact sync payload to transfer company name & employees
-    const syncPayload = createQrSyncPayload(settings, employees);
-    if (syncPayload) {
-      return `${base}/?portal=1&sync=${syncPayload}`;
-    }
-    
+    // Clean and lightweight direct URL for maximum clarity and fast scanning
     return `${base}/?portal=1`;
-  }, [settings, employees, detectedOrigin]);
+  }, [settings.customCloudflareDomain, detectedOrigin]);
 
   // Determine target domain for Admin full transfer
   const effectiveDomain = settings.customCloudflareDomain?.trim() || detectedOrigin;
@@ -100,7 +95,7 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
         {
           width: 320,
           margin: 2,
-          errorCorrectionLevel: 'H',
+          errorCorrectionLevel: 'M',
           color: {
             dark: '#0f172a',
             light: '#ffffff',
@@ -123,7 +118,7 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
       {
         width: 600,
         margin: 2,
-        errorCorrectionLevel: 'H',
+        errorCorrectionLevel: 'M',
         color: {
           dark: '#0f172a',
           light: '#ffffff',
