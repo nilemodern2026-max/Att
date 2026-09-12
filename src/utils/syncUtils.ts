@@ -67,7 +67,7 @@ export function createQrSyncPayload(settings: SystemSettings, employees: Employe
         id: e.id,
         d: e.department || '',
       })),
-      v: Date.now(),
+      v: 1,
     };
 
     const json = JSON.stringify(compact);

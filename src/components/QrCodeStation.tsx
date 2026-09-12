@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import QRCode from 'qrcode';
 import { 
   Printer, 
@@ -63,7 +63,7 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
   // Determine effective Portal URL:
   // Includes smart sync payload so ANY phone or domain scanning the QR code
   // automatically receives the actual company name and active employees!
-  const getCleanPortalUrl = () => {
+  const portalUrl = useMemo(() => {
     const rawDomain = settings.customCloudflareDomain?.trim();
     let base = rawDomain || detectedOrigin || 'https://ais-pre-y2jk6zluucwdfano6awvzy-116027320757.europe-west1.run.app';
     
@@ -81,15 +81,24 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
       return `${base}/?portal=1&sync=${syncPayload}`;
     }
     return `${base}/?portal=1`;
-  };
-
-  const portalUrl = getCleanPortalUrl();
+  }, [
+    settings.customCloudflareDomain,
+    settings.location.companyName,
+    settings.location.locationName,
+    settings.location.latitude,
+    settings.location.longitude,
+    settings.location.allowedRadiusMeters,
+    employees,
+    detectedOrigin,
+  ]);
 
   // Determine target domain for Admin full transfer
   const effectiveDomain = settings.customCloudflareDomain?.trim() || detectedOrigin;
-  const adminTransferUrl = effectiveDomain 
-    ? createAdminTransferUrl(effectiveDomain, settings, employees, records)
-    : '';
+  const adminTransferUrl = useMemo(() => {
+    return effectiveDomain 
+      ? createAdminTransferUrl(effectiveDomain, settings, employees, records)
+      : '';
+  }, [effectiveDomain, settings, employees, records]);
 
   // Generate QR Code onto canvas
   useEffect(() => {
@@ -110,7 +119,8 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
           if (error) {
             console.error('Error generating QR code', error);
           } else if (canvasRef.current) {
-            setQrDataUrl(canvasRef.current.toDataURL('image/png'));
+            const newUrl = canvasRef.current.toDataURL('image/png');
+            setQrDataUrl((prev) => (prev !== newUrl ? newUrl : prev));
           }
         }
       );

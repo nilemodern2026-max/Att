@@ -132,6 +132,17 @@ export function generateQrPosterHtml(params: {
       background: #ffffff;
       box-shadow: 0 4px 20px rgba(0,0,0,0.06);
     }
+    .poster-logo {
+      width: 64px;
+      height: 64px;
+      object-fit: contain;
+      margin: 0 auto 10px auto;
+      display: block;
+      border-radius: 12px;
+      padding: 4px;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+    }
     .company-badge {
       display: inline-block;
       background: #059669;
@@ -231,6 +242,7 @@ export function generateQrPosterHtml(params: {
 </head>
 <body>
   <div class="poster-card">
+    <img src="https://i.ibb.co/Qv4gxzG2/122.png" alt="شعار الشركة" class="poster-logo" />
     <div class="company-badge">نقطة البصمة الذكية المعتمدة</div>
     <h1 class="company-name">${companyName}</h1>
     <div class="location-name">📍 ${locationName}</div>
