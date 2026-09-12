@@ -7,63 +7,32 @@ const STORAGE_KEYS = {
   SAVED_EMPLOYEE_CODE: 'attendance_saved_emp_code',
 };
 
-// Default company settings
+// Default company settings - Clean & ready for user customization
 export const DEFAULT_SETTINGS: SystemSettings = {
   location: {
-    companyName: 'شركة النيل الحديثة للحلول والخدمات',
-    locationName: 'المقر الرئيسي - القاهرة',
-    latitude: 30.0444,     // Cairo coordinates by default
+    companyName: 'نظام إدارة الحضور والانصراف الذكي',
+    locationName: 'المقر الرئيسي',
+    latitude: 30.0444,     // Default coordinates
     longitude: 31.2357,
     allowedRadiusMeters: 200, // 200 meters radius
-    enableGpsStrictValidation: true,
+    enableGpsStrictValidation: false, // Turned off initially until admin sets exact GPS
   },
   hours: {
     checkInStart: '08:00',
-    checkInEnd: '09:30',
+    checkInEnd: '10:00',
     checkOutStart: '16:00',
     checkOutEnd: '18:00',
     workingDays: [0, 1, 2, 3, 4], // Sun to Thu
   },
   allowManualAdminOverride: true,
   autoSaveEmployeeCode: true,
-  enableDeviceLock: true, // قفل الهاتف مفعل افتراضياً لحماية التسجيل ومنع التلاعب
+  enableDeviceLock: true, // قفل الهاتف مفعل لحماية التسجيل ومنع التلاعب
   customCloudflareDomain: '',
-  adminPin: '1694375',
+  adminPin: '1234',
 };
 
-// Default sample employees with name and fingerprint code
-export const INITIAL_EMPLOYEES: Employee[] = [
-  {
-    id: 'emp-1',
-    code: '1001',
-    name: 'أحمد محمود إبراهيم',
-    isActive: true,
-  },
-  {
-    id: 'emp-2',
-    code: '1002',
-    name: 'سارة عبد الرحمن علي',
-    isActive: true,
-  },
-  {
-    id: 'emp-3',
-    code: '1003',
-    name: 'محمد طارق كمال',
-    isActive: true,
-  },
-  {
-    id: 'emp-4',
-    code: '1004',
-    name: 'منى يوسف حسن',
-    isActive: true,
-  },
-  {
-    id: 'emp-5',
-    code: '1005',
-    name: 'كريم عادل الشناوي',
-    isActive: true,
-  },
-];
+// Clean initial employees list - No dummy records so user data is 100% authentic
+export const INITIAL_EMPLOYEES: Employee[] = [];
 
 // Helper to format today's date YYYY-MM-DD
 export function getTodayDateString(): string {
@@ -88,114 +57,9 @@ export function isTimeWithinWindow(currentHHmm: string, startHHmm: string, endHH
   return currentHHmm >= startHHmm && currentHHmm <= endHHmm;
 }
 
-// Seed initial records for testing and demonstration
+// Initial records is empty by default
 function generateInitialRecords(): AttendanceRecord[] {
-  const today = getTodayDateString();
-  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-
-  return [
-    {
-      id: 'rec-today-1',
-      employeeId: 'emp-1',
-      employeeCode: '1001',
-      employeeName: 'م. أحمد محمود إبراهيم',
-      department: 'تقنية المعلومات',
-      date: today,
-      checkInTime: '08:14:22',
-      checkOutTime: undefined,
-      status: 'present',
-      checkInCoords: {
-        latitude: 30.0445,
-        longitude: 31.2358,
-        distanceMeters: 25,
-        isWithinRadius: true,
-      },
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'rec-today-2',
-      employeeId: 'emp-2',
-      employeeCode: '1002',
-      employeeName: 'سارة عبد الرحمن علي',
-      department: 'الموارد البشرية',
-      date: today,
-      checkInTime: '08:28:10',
-      checkOutTime: undefined,
-      status: 'present',
-      checkInCoords: {
-        latitude: 30.0443,
-        longitude: 31.2356,
-        distanceMeters: 38,
-        isWithinRadius: true,
-      },
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'rec-today-3',
-      employeeId: 'emp-4',
-      employeeCode: '1004',
-      employeeName: 'منى يوسف حسن',
-      department: 'خدمة العملاء',
-      date: today,
-      checkInTime: '10:15:00',
-      checkOutTime: undefined,
-      status: 'pending_permission',
-      hasPermissionRequest: true,
-      permissionType: 'check_in',
-      permissionReason: 'عطل مفاجئ في وسيلة المواصلات وازدحام مروري شديد على المحور',
-      permissionStatus: 'pending',
-      checkInCoords: {
-        latitude: 30.0444,
-        longitude: 31.2357,
-        distanceMeters: 15,
-        isWithinRadius: true,
-      },
-      createdAt: new Date().toISOString(),
-    },
-    // Yesterday records
-    {
-      id: 'rec-yest-1',
-      employeeId: 'emp-1',
-      employeeCode: '1001',
-      employeeName: 'م. أحمد محمود إبراهيم',
-      department: 'تقنية المعلومات',
-      date: yesterday,
-      checkInTime: '08:10:00',
-      checkOutTime: '16:45:00',
-      status: 'checked_out',
-      createdAt: new Date(Date.now() - 86400000).toISOString(),
-    },
-    {
-      id: 'rec-yest-2',
-      employeeId: 'emp-2',
-      employeeCode: '1002',
-      employeeName: 'سارة عبد الرحمن علي',
-      department: 'الموارد البشرية',
-      date: yesterday,
-      checkInTime: '08:22:00',
-      checkOutTime: '17:05:00',
-      status: 'checked_out',
-      createdAt: new Date(Date.now() - 86400000).toISOString(),
-    },
-    {
-      id: 'rec-yest-3',
-      employeeId: 'emp-3',
-      employeeCode: '1003',
-      employeeName: 'محمد طارق كمال',
-      department: 'الإدارة المالية',
-      date: yesterday,
-      checkInTime: '09:45:00',
-      checkOutTime: '16:30:00',
-      status: 'late_with_permission',
-      hasPermissionRequest: true,
-      permissionType: 'check_in',
-      permissionReason: 'مراجعة مصلحة الضرائب لإنهاء الفحص المستندي',
-      permissionStatus: 'approved',
-      permissionReviewedAt: yesterday + ' 10:00:00',
-      permissionReviewedBy: 'مدير الموارد البشرية',
-      createdAt: new Date(Date.now() - 86400000).toISOString(),
-    },
-  ];
+  return [];
 }
 
 // Load Employees
@@ -203,13 +67,22 @@ export function getStoredEmployees(): Employee[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.EMPLOYEES);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEYS.EMPLOYEES, JSON.stringify(INITIAL_EMPLOYEES));
-      return INITIAL_EMPLOYEES;
+      return [];
     }
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    
+    // Auto-clean legacy sample employees (1001 to 1005 with أحمد محمود) so user gets clean slate
+    const isLegacyDummies = parsed.length <= 5 && parsed.some(e => e.code === '1001' && (e.name.includes('أحمد محمود') || e.name.includes('إبراهيم')));
+    if (isLegacyDummies) {
+      localStorage.removeItem(STORAGE_KEYS.EMPLOYEES);
+      return [];
+    }
+
+    return parsed;
   } catch (e) {
     console.error('Failed to parse employees', e);
-    return INITIAL_EMPLOYEES;
+    return [];
   }
 }
 
@@ -252,13 +125,28 @@ export function getStoredSettings(): SystemSettings {
     const parsed = JSON.parse(raw);
     const pin = (!parsed.adminPin || parsed.adminPin === '1234') ? '1694375' : parsed.adminPin;
     const customCloudflare = parsed.customCloudflareDomain?.trim() || '';
+    
+    // If the company name is still the legacy dummy one, replace it with neutral default
+    const effectiveCompanyName = (parsed.location?.companyName && !parsed.location.companyName.includes('النيل الحديثة'))
+      ? parsed.location.companyName
+      : DEFAULT_SETTINGS.location.companyName;
+
+    const effectiveLocationName = (parsed.location?.locationName && !parsed.location.companyName?.includes('النيل الحديثة'))
+      ? parsed.location.locationName
+      : DEFAULT_SETTINGS.location.locationName;
+
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
       adminPin: pin,
       customCloudflareDomain: customCloudflare,
       enableDeviceLock: parsed.enableDeviceLock ?? true,
-      location: { ...DEFAULT_SETTINGS.location, ...(parsed.location || {}) },
+      location: { 
+        ...DEFAULT_SETTINGS.location, 
+        ...(parsed.location || {}),
+        companyName: effectiveCompanyName,
+        locationName: effectiveLocationName,
+      },
       hours: { ...DEFAULT_SETTINGS.hours, ...(parsed.hours || {}) },
     };
   } catch (e) {

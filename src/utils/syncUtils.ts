@@ -119,10 +119,13 @@ export function checkAndApplyUrlSync(): {
         };
         saveSettings(updatedSettings);
 
-        // Merge employees
+        // Merge employees (ensuring legacy demo dummies are never retained)
         if (Array.isArray(payload.emp) && payload.emp.length > 0) {
           const currentEmployees = getStoredEmployees();
-          const existingMap = new Map(currentEmployees.map((e) => [e.code, e]));
+          const cleanCurrent = currentEmployees.filter(
+            (e) => !(e.code === '1001' && (e.name.includes('أحمد محمود') || e.name.includes('إبراهيم')))
+          );
+          const existingMap = new Map(cleanCurrent.map((e) => [e.code, e]));
 
           payload.emp.forEach((item) => {
             const existing = existingMap.get(item.c);

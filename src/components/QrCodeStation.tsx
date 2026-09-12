@@ -61,9 +61,9 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
   const detectedOrigin = typeof window !== 'undefined' ? window.location.origin : '';
 
   // Determine effective Portal URL:
-  // Clean, ultra-fast and lightweight URL that works 100% on any mobile scanner
+  // Encodes real company settings and active employees so any mobile device gets synced upon scanning
   const portalUrl = useMemo(() => {
-    let base = settings.customCloudflareDomain?.trim() || detectedOrigin || 'https://ais-pre-y2jk6zluucwdfano6awvzy-116027320757.europe-west1.run.app';
+    let base = settings.customCloudflareDomain?.trim() || detectedOrigin || (typeof window !== 'undefined' ? window.location.origin : '');
     
     // Ensure protocol
     if (!base.startsWith('http://') && !base.startsWith('https://')) {
@@ -73,8 +73,14 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
     // Remove trailing slash
     base = base.replace(/\/+$/, '');
     
+    // Generate compact sync payload to transfer company name & employees
+    const syncPayload = createQrSyncPayload(settings, employees);
+    if (syncPayload) {
+      return `${base}/?portal=1&sync=${syncPayload}`;
+    }
+    
     return `${base}/?portal=1`;
-  }, [settings.customCloudflareDomain, detectedOrigin]);
+  }, [settings, employees, detectedOrigin]);
 
   // Determine target domain for Admin full transfer
   const effectiveDomain = settings.customCloudflareDomain?.trim() || detectedOrigin;
@@ -426,6 +432,35 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
             تم حفظ الرابط وتحديث رمز الـ QR بنجاح!
           </div>
         )}
+      </div>
+
+      {/* Programmed Data Verification Banner */}
+      <div className="max-w-md mx-auto bg-emerald-50 border border-emerald-200/90 rounded-2xl p-3.5 text-xs text-emerald-950 shadow-xs print:hidden">
+        <div className="flex items-center gap-2 font-bold text-emerald-900 mb-1.5">
+          <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>البيانات المبرمجة فعلياً داخل رمز الـ QR الحالي:</span>
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-[11px] text-emerald-800 bg-white/70 rounded-xl p-2.5 border border-emerald-100">
+          <div>
+            <span className="text-slate-500">اسم المنشأة: </span>
+            <strong className="text-slate-900">{settings.location.companyName || 'بدون تحديد'}</strong>
+          </div>
+          <div>
+            <span className="text-slate-500">المقر: </span>
+            <strong className="text-slate-900">{settings.location.locationName || 'المقر الرئيسي'}</strong>
+          </div>
+          <div>
+            <span className="text-slate-500">ساعات الدوام: </span>
+            <strong className="text-slate-900">{settings.hours.workStartTime} - {settings.hours.workEndTime}</strong>
+          </div>
+          <div>
+            <span className="text-slate-500">الموظفين المعتمدين: </span>
+            <strong className="text-slate-900">{employees.length} موظف</strong>
+          </div>
+        </div>
+        <p className="text-[10px] text-emerald-700 mt-2 leading-relaxed">
+          * بمجرد مسح هذا الرمز بأي هاتف، ستظهر بيانات شركتك وقائمة موظفيك تلقائياً دون أي بيانات افتراضية سابقة.
+        </p>
       </div>
 
       {/* Printable Poster Container */}
