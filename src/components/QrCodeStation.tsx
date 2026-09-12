@@ -17,7 +17,8 @@ import {
   Sparkles,
   Eye,
   X,
-  AlertCircle
+  AlertCircle,
+  AlertTriangle
 } from 'lucide-react';
 import { SystemSettings, Employee, AttendanceRecord } from '../types';
 import { generateQrPosterHtml, printHtmlDocument } from '../utils/printUtils';
@@ -60,10 +61,17 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
   // Detected origin
   const detectedOrigin = typeof window !== 'undefined' ? window.location.origin : '';
 
+  // Mode: Use direct cloud link or custom Cloudflare domain
+  const [activeLinkMode, setActiveLinkMode] = useState<'direct' | 'cloudflare'>(
+    settings.customCloudflareDomain?.trim() ? 'cloudflare' : 'direct'
+  );
+
   // Determine effective Portal URL:
-  // Encodes real company settings and active employees so any mobile device gets synced upon scanning
   const portalUrl = useMemo(() => {
-    let base = settings.customCloudflareDomain?.trim() || detectedOrigin || (typeof window !== 'undefined' ? window.location.origin : '');
+    let base = detectedOrigin;
+    if (activeLinkMode === 'cloudflare' && settings.customCloudflareDomain?.trim()) {
+      base = settings.customCloudflareDomain.trim();
+    }
     
     // Ensure protocol
     if (!base.startsWith('http://') && !base.startsWith('https://')) {
@@ -75,7 +83,7 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
     
     // Clean and lightweight direct URL for maximum clarity and fast scanning
     return `${base}/?portal=1`;
-  }, [settings.customCloudflareDomain, detectedOrigin]);
+  }, [activeLinkMode, settings.customCloudflareDomain, detectedOrigin]);
 
   // Determine target domain for Admin full transfer
   const effectiveDomain = settings.customCloudflareDomain?.trim() || detectedOrigin;
@@ -322,6 +330,56 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
           <p className="text-[11px] text-slate-300 leading-relaxed">
             الرمز مشفر بأعلى معيار دقة وتصحيح أخطاء (Error Correction Level H) ليعمل مع أي كاميرا هاتف فوراً في أقل من ثانية، ومربوط بنطاق شركتكم <strong className="text-white">"{settings.location.companyName}"</strong> لفتح صفحة الحضور والانصراف مباشرة دون أي بطء أو تشويش.
           </p>
+        </div>
+
+        {/* Link Mode Selector */}
+        <div className="bg-slate-900/90 rounded-xl p-3 border border-slate-700 space-y-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+              <span>اختر النطاق المضمن داخل رمز الـ QR:</span>
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveLinkMode('direct')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeLinkMode === 'direct'
+                    ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                }`}
+              >
+                <span>الرابط السحابي المباشر (موصى به الآن)</span>
+                {activeLinkMode === 'direct' && <Check className="w-3.5 h-3.5" />}
+              </button>
+
+              {settings.customCloudflareDomain && (
+                <button
+                  type="button"
+                  onClick={() => setActiveLinkMode('cloudflare')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    activeLinkMode === 'cloudflare'
+                      ? 'bg-sky-500 text-slate-950 shadow-sm'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  <span>رابط Cloudflare</span>
+                  {activeLinkMode === 'cloudflare' && <Check className="w-3.5 h-3.5" />}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {activeLinkMode === 'cloudflare' && (
+            <div className="bg-amber-950/70 border border-amber-500/50 rounded-lg p-2.5 text-xs text-amber-200 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div className="leading-relaxed text-[11px]">
+                <strong>تنبيه فني هام:</strong> إذا قام الموظفون بمسح رمز Cloudflare ولم يظهر حضورهم في لوحة الإدارة، فالسبب أن موقع Cloudflare (att-8oz.pages.dev) تم نشره بنسخة قديمة قبل تفعيل السحابة. 
+                <span className="text-white block mt-0.5 font-bold">
+                  👉 للعمل فوراً الآن بدون أي انتظار: اضغط على زر "الرابط السحابي المباشر" بالأعلى واطبع أو امسح الرمز، وسيصلك الحضور لحظياً!
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Current Encoded URL Bar */}

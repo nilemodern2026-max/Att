@@ -17,7 +17,8 @@ import {
   KeyRound,
   X,
   Smartphone,
-  ShieldAlert
+  ShieldAlert,
+  Cloud
 } from 'lucide-react';
 import { Employee, AttendanceRecord, SystemSettings } from '../types';
 import { CompanyLogo } from './CompanyLogo';
@@ -31,6 +32,7 @@ import {
   getOrCreateDeviceId,
   getDeviceName
 } from '../utils/storage';
+import { pushRecordToCloud, pushEmployeeToCloud } from '../utils/firebase';
 
 interface EmployeePortalPageProps {
   employees: Employee[];
@@ -217,12 +219,14 @@ export const EmployeePortalPage: React.FC<EmployeePortalPageProps> = ({
 
       // فحص ج: إذا لم يكن الموظف مربوطاً بأي هاتف حتى الآن، يتم ربط وقفل هذا الهاتف له فوراً
       if (!currentEmployee.boundDeviceId && onUpdateEmployee) {
-        onUpdateEmployee({
+        const boundEmployee = {
           ...currentEmployee,
           boundDeviceId: currentDeviceId,
           boundDeviceName: currentDeviceName,
           boundAt: new Date().toISOString(),
-        });
+        };
+        onUpdateEmployee(boundEmployee);
+        pushEmployeeToCloud(boundEmployee).catch(console.error);
       }
     }
 
@@ -361,14 +365,19 @@ export const EmployeePortalPage: React.FC<EmployeePortalPageProps> = ({
       };
     }
 
+    // Push directly to cloud Firestore to ensure immediate admin sync
+    pushRecordToCloud(newRecord).catch((err) => {
+      console.warn('Direct cloud push encountered an issue, saved locally:', err);
+    });
+
     onRecordSuccess(newRecord);
 
-    // Show friendly success confirmation
+    // Show friendly success confirmation with cloud sync badge
     if (requiresPermission) {
       setSubmissionResult({
         success: true,
         title: 'تم إرسال الحركة مع طلب الإذن بنجاح',
-        message: `تم توثيق ${selectedAction === 'check_in' ? 'حضورك' : 'انصرافك'} الساعة (${currentTimeStr}) خارج المواعيد المقررة. تم رفع طلب الإذن للإدارة لاعتماده رسمياً.`,
+        message: `تم توثيق ${selectedAction === 'check_in' ? 'حضورك' : 'انصرافك'} الساعة (${currentTimeStr}) ومزامنتها سحابياً مع شاشة الإدارة. تم رفع طلب الإذن للإدارة لاعتماده رسمياً.`,
         type: 'warning',
         record: newRecord,
       });
@@ -376,7 +385,7 @@ export const EmployeePortalPage: React.FC<EmployeePortalPageProps> = ({
       setSubmissionResult({
         success: true,
         title: `تم تسجيل ${selectedAction === 'check_in' ? 'الحضور' : 'الانصراف'} بنجاح!`,
-        message: `أهلاً بك يا ${currentEmployee.name}، تم توثيق بصمتك في تمام الساعة (${currentTimeStr}) داخل مقر العمل.`,
+        message: `أهلاً بك يا ${currentEmployee.name}، تم توثيق بصمتك في تمام الساعة (${currentTimeStr}) وإرسالها سحابياً لشاشة الإدارة فوراً.`,
         type: 'success',
         record: newRecord,
       });

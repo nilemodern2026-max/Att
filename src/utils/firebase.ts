@@ -11,7 +11,15 @@ import {
   enableIndexedDbPersistence
 } from 'firebase/firestore';
 import { Employee, AttendanceRecord, SystemSettings } from '../types';
-import { DEFAULT_SETTINGS, saveSettings, saveEmployees, saveRecords } from './storage';
+import { 
+  DEFAULT_SETTINGS, 
+  saveSettings, 
+  saveEmployees, 
+  saveRecords,
+  getStoredSettings,
+  getStoredEmployees,
+  getStoredRecords
+} from './storage';
 
 // Firebase Client Configuration
 export const firebaseConfig = {
@@ -74,8 +82,10 @@ export function subscribeToCloudSettings(
         saveSettings(merged); // Cache locally
         onUpdate(merged);
       } else {
-        // If settings not yet in cloud, seed them once with current default
-        pushSettingsToCloud(DEFAULT_SETTINGS).catch(console.error);
+        // If settings not yet in cloud, seed them with current stored settings
+        const currentStored = typeof window !== 'undefined' ? (getStoredSettings?.() || DEFAULT_SETTINGS) : DEFAULT_SETTINGS;
+        pushSettingsToCloud(currentStored).catch(console.error);
+        onUpdate(currentStored);
       }
     },
     (err) => {
@@ -108,6 +118,17 @@ export function subscribeToCloudEmployees(
   return onSnapshot(
     EMPLOYEES_COLLECTION_REF,
     (snapshot) => {
+      if (snapshot.empty) {
+        // Prevent clearing local employees if cloud is newly provisioned!
+        const localEmployees = getStoredEmployees();
+        if (localEmployees.length > 0) {
+          console.info('Cloud employees collection is empty, auto-seeding with local employees:', localEmployees.length);
+          localEmployees.forEach((emp) => pushEmployeeToCloud(emp).catch(console.error));
+          onUpdate(localEmployees);
+          return;
+        }
+      }
+
       const employees: Employee[] = [];
       snapshot.forEach((docSnap) => {
         const data = docSnap.data() as Employee;
@@ -170,6 +191,16 @@ export function subscribeToCloudRecords(
   return onSnapshot(
     RECORDS_COLLECTION_REF,
     (snapshot) => {
+      if (snapshot.empty) {
+        const localRecords = getStoredRecords();
+        if (localRecords.length > 0) {
+          console.info('Cloud records collection is empty, auto-seeding with local records:', localRecords.length);
+          localRecords.forEach((rec) => pushRecordToCloud(rec).catch(console.error));
+          onUpdate(localRecords);
+          return;
+        }
+      }
+
       const records: AttendanceRecord[] = [];
       snapshot.forEach((docSnap) => {
         const data = docSnap.data() as AttendanceRecord;

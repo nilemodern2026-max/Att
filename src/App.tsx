@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Navbar } from './components/Navbar';
 import { TodayDashboard } from './components/TodayDashboard';
 import { HistoryLogs } from './components/HistoryLogs';
@@ -57,6 +57,9 @@ export default function App() {
   const [isPortalMode, setIsPortalMode] = useState<boolean>(isInitiallyPortal);
 
   // Initialize data on mount + Apply Cross-Domain & QR Sync if present + Real-time Cloud Subscriptions
+  const isInitialRecordsLoadRef = useRef(true);
+  const previousRecordCountRef = useRef(records.length);
+
   useEffect(() => {
     // 1. Check if URL contains sync payload from QR scan or Admin transfer
     const syncRes = checkAndApplyUrlSync();
@@ -77,6 +80,14 @@ export default function App() {
       setTimeout(() => setSyncToast(null), 5000);
     }
 
+    // Auto-seed current local employees & settings to Firestore if needed
+    const initialLocalEmps = getStoredEmployees();
+    if (initialLocalEmps.length > 0) {
+      initialLocalEmps.forEach((emp) => pushEmployeeToCloud(emp).catch(() => {}));
+    }
+    const initialLocalSettings = getStoredSettings();
+    pushSettingsToCloud(initialLocalSettings).catch(() => {});
+
     // 2. Real-time Firebase Cloud Subscriptions
     const unsubSettings = subscribeToCloudSettings((cloudSettings) => {
       setSettings(cloudSettings);
@@ -91,6 +102,26 @@ export default function App() {
     const unsubRecords = subscribeToCloudRecords((cloudRecords) => {
       setRecords(cloudRecords);
       setIsCloudConnected(true);
+
+      // If not initial load and a new record was received from cloud
+      if (!isInitialRecordsLoadRef.current && cloudRecords.length > previousRecordCountRef.current) {
+        const latestRecord = cloudRecords[0];
+        if (latestRecord) {
+          const actionText = latestRecord.checkOutTime && !latestRecord.checkInTime 
+            ? `تسجيل انصراف (${latestRecord.checkOutTime})` 
+            : latestRecord.checkInTime 
+            ? `تسجيل حضور (${latestRecord.checkInTime})` 
+            : 'تسجيل حركة';
+          
+          setSyncToast({
+            title: `🔔 حركة حضور وانصراف فورية!`,
+            desc: `قام الموظف (${latestRecord.employeeName}) بـ ${actionText}.`,
+          });
+          setTimeout(() => setSyncToast(null), 6000);
+        }
+      }
+      isInitialRecordsLoadRef.current = false;
+      previousRecordCountRef.current = cloudRecords.length;
     }, () => setIsCloudConnected(false));
 
     // Listen for storage updates across local tabs/windows as fallback
