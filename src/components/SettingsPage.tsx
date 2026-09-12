@@ -235,49 +235,20 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             </div>
           </div>
 
-          {/* Cloudflare Pages Live Domain */}
+          {/* Central Cloud Sync Status */}
           <div className="pt-2 border-t border-slate-100">
-            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
+            <div className="bg-emerald-50/80 p-3.5 rounded-xl border border-emerald-200 space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                  <Globe className="w-4 h-4 text-sky-600" />
-                  <span>رابط استضافة الموقع على كلاود فلير (Cloudflare Pages URL):</span>
-                </label>
-                <div className="flex items-center gap-2">
-                  {typeof window !== 'undefined' && window.location.origin && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          customCloudflareDomain: window.location.origin,
-                        }))
-                      }
-                      className="text-[10px] text-sky-700 hover:text-sky-900 bg-sky-50 hover:bg-sky-100 font-bold px-2 py-0.5 rounded-md border border-sky-200 transition-colors"
-                    >
-                      استخدام رابط الموقع الحالي
-                    </button>
-                  )}
-                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
-                    {formData.customCloudflareDomain?.trim() ? 'رابط مخصص' : 'كشف تلقائي'}
-                  </span>
-                </div>
+                <span className="font-bold text-emerald-950 text-xs flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+                  <span>الربط السحابي المركزي (Firebase Cloud Database) نشط وموحد:</span>
+                </span>
+                <span className="text-[10px] bg-emerald-600 text-white font-bold px-2 py-0.5 rounded-full">
+                  مزامنة فورية ولحظية
+                </span>
               </div>
-              <input
-                type="url"
-                value={formData.customCloudflareDomain || ''}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    customCloudflareDomain: e.target.value,
-                  }))
-                }
-                dir="ltr"
-                placeholder={typeof window !== 'undefined' && window.location.origin ? `${window.location.origin} (تلقائي)` : 'https://your-project.pages.dev'}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 bg-white font-mono text-xs font-semibold focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
-              />
-              <p className="text-[11px] text-slate-500">
-                إذا تركته فارغاً، سيتعرف النظام تلقائياً على رابط كلاود فلير عند فتح الموقع منه. يمكنك أيضاً كتابة رابط كلاود فلير المخصص إذا رغبت.
+              <p className="text-[11px] text-emerald-800 leading-relaxed">
+                جميع حركات الحضور والانصراف وقوائم الموظفين تُحفظ في قاعدة البيانات السحابية المركزية فوراً. بمجرد قيام الموظف بتسجيل الدخول من هاتفه، يظهر اسمه وساعته في لوحة الإدارة في نفس الثانية.
               </p>
             </div>
           </div>

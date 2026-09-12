@@ -25,6 +25,7 @@ import {
   getSavedEmployeeCode, 
   saveEmployeeCode 
 } from '../utils/storage';
+import { pushRecordToCloud } from '../utils/firebase';
 
 interface EmployeePortalModalProps {
   isOpen: boolean;
@@ -295,6 +296,11 @@ export const EmployeePortalModal: React.FC<EmployeePortalModalProps> = ({
         permissionStatus: requiresPermission ? 'pending' : todayRecord?.permissionStatus,
       };
     }
+
+    // Push to cloud Firestore for instant live dashboard update
+    pushRecordToCloud(newRecord).catch((err) => {
+      console.warn('Direct cloud push encountered an issue, saved locally:', err);
+    });
 
     // Dispatch save
     onRecordSuccess(newRecord);
