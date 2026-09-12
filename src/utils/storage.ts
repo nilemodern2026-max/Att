@@ -127,13 +127,8 @@ export function getStoredSettings(): SystemSettings {
     const customCloudflare = parsed.customCloudflareDomain?.trim() || '';
     
     // If the company name is still the legacy dummy one, replace it with neutral default
-    const effectiveCompanyName = (parsed.location?.companyName && !parsed.location.companyName.includes('النيل الحديثة'))
-      ? parsed.location.companyName
-      : DEFAULT_SETTINGS.location.companyName;
-
-    const effectiveLocationName = (parsed.location?.locationName && !parsed.location.companyName?.includes('النيل الحديثة'))
-      ? parsed.location.locationName
-      : DEFAULT_SETTINGS.location.locationName;
+    const effectiveCompanyName = parsed.location?.companyName || DEFAULT_SETTINGS.location.companyName;
+    const effectiveLocationName = parsed.location?.locationName || DEFAULT_SETTINGS.location.locationName;
 
     return {
       ...DEFAULT_SETTINGS,

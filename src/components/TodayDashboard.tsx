@@ -53,8 +53,24 @@ export const TodayDashboard: React.FC<TodayDashboardProps> = ({
   // Active employees
   const activeEmployees = employees.filter((e) => e.isActive);
 
-  // Today records
-  const todayRecords = records.filter((r) => r.date === today);
+  // Today records: matches today's date string or created today
+  const todayRecords = records.filter((r) => {
+    if (r.date === today) return true;
+    if (r.createdAt) {
+      try {
+        const d = new Date(r.createdAt);
+        const now = new Date();
+        return (
+          d.getFullYear() === now.getFullYear() &&
+          d.getMonth() === now.getMonth() &&
+          d.getDate() === now.getDate()
+        );
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  });
 
   // Map employeeId -> today's record
   const employeeTodayMap = new Map<string, AttendanceRecord>();
@@ -70,8 +86,8 @@ export const TodayDashboard: React.FC<TodayDashboardProps> = ({
   const checkedOutCount = todayRecords.filter(
     (r) => r.status === 'checked_out' || r.status === 'early_with_permission'
   ).length;
-  const pendingPermissions = todayRecords.filter(
-    (r) => r.status === 'pending_permission' && r.permissionStatus === 'pending'
+  const pendingPermissions = records.filter(
+    (r) => r.permissionStatus === 'pending' || r.status === 'pending_permission' || (r.hasPermissionRequest && !['approved', 'rejected'].includes(r.permissionStatus || ''))
   );
   
   // Absent = active employees who don't have any record or have rejected permission marked as absent

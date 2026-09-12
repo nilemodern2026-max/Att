@@ -32,7 +32,7 @@ import {
   getOrCreateDeviceId,
   getDeviceName
 } from '../utils/storage';
-import { pushRecordToCloud, pushEmployeeToCloud } from '../utils/firebase';
+import { pushRecordToCloud, pushEmployeeToCloud, syncUnsyncedLocalRecordsToCloud } from '../utils/firebase';
 
 interface EmployeePortalPageProps {
   employees: Employee[];
@@ -55,6 +55,7 @@ export const EmployeePortalPage: React.FC<EmployeePortalPageProps> = ({
   const [selectedAction, setSelectedAction] = useState<'check_in' | 'check_out'>('check_in');
   const [employeeCode, setEmployeeCode] = useState<string>('');
   const [isVerifyingGps, setIsVerifyingGps] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [gpsDistance, setGpsDistance] = useState<number | null>(null);
   const [gpsError, setGpsError] = useState<string>('');
 
@@ -108,12 +109,14 @@ export const EmployeePortalPage: React.FC<EmployeePortalPageProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  // Load saved employee code on mount
+  // Load saved employee code and auto-sync any pending local records on mount
   useEffect(() => {
     const saved = getSavedEmployeeCode();
     if (saved) {
       setEmployeeCode(saved);
     }
+    // Auto-sync any previously unsynced records to Firestore cloud
+    syncUnsyncedLocalRecordsToCloud().catch(console.warn);
   }, []);
 
   // Find employee matching code
@@ -332,8 +335,10 @@ export const EmployeePortalPage: React.FC<EmployeePortalPageProps> = ({
       // Update existing record
       newRecord = {
         ...todayRecord,
-        checkOutTime: selectedAction === 'check_out' ? currentTimeStr : todayRecord.checkOutTime,
-        checkOutCoords: selectedAction === 'check_out' ? coordsObj : todayRecord.checkOutCoords,
+        ...(selectedAction === 'check_out' ? {
+          checkOutTime: currentTimeStr,
+          checkOutCoords: coordsObj,
+        } : {}),
         status:
           selectedAction === 'check_out'
             ? requiresPermission
@@ -341,9 +346,11 @@ export const EmployeePortalPage: React.FC<EmployeePortalPageProps> = ({
               : 'checked_out'
             : todayRecord.status,
         hasPermissionRequest: requiresPermission ? true : todayRecord.hasPermissionRequest,
-        permissionType: requiresPermission ? selectedAction : todayRecord.permissionType,
-        permissionReason: requiresPermission ? permissionReason : todayRecord.permissionReason,
-        permissionStatus: requiresPermission ? 'pending' : todayRecord.permissionStatus,
+        ...(requiresPermission ? {
+          permissionType: selectedAction,
+          permissionReason: permissionReason.trim(),
+          permissionStatus: 'pending',
+        } : {}),
       };
     } else {
       // Create new record for today
@@ -354,45 +361,63 @@ export const EmployeePortalPage: React.FC<EmployeePortalPageProps> = ({
         employeeName: currentEmployee.name,
         department: currentEmployee.department,
         date: today,
-        checkInTime: selectedAction === 'check_in' ? currentTimeStr : undefined,
-        checkInCoords: selectedAction === 'check_in' ? coordsObj : undefined,
+        ...(selectedAction === 'check_in' ? {
+          checkInTime: currentTimeStr,
+          checkInCoords: coordsObj,
+        } : {}),
         status: requiresPermission ? 'pending_permission' : 'present',
         hasPermissionRequest: requiresPermission,
-        permissionType: requiresPermission ? selectedAction : undefined,
-        permissionReason: requiresPermission ? permissionReason : undefined,
-        permissionStatus: requiresPermission ? 'pending' : undefined,
+        ...(requiresPermission ? {
+          permissionType: selectedAction,
+          permissionReason: permissionReason.trim(),
+          permissionStatus: 'pending',
+        } : {}),
         createdAt: new Date().toISOString(),
       };
     }
 
-    // Push directly to cloud Firestore to ensure immediate admin sync
-    pushRecordToCloud(newRecord).catch((err) => {
-      console.warn('Direct cloud push encountered an issue, saved locally:', err);
-    });
+    setIsSubmitting(true);
+    try {
+      // Push directly to cloud Firestore to ensure immediate admin sync
+      await pushRecordToCloud(newRecord);
+      onRecordSuccess(newRecord);
 
-    onRecordSuccess(newRecord);
+      // Show friendly success confirmation with cloud sync badge
+      if (requiresPermission) {
+        setSubmissionResult({
+          success: true,
+          title: 'تم إرسال الحركة مع طلب الإذن بنجاح',
+          message: `تم توثيق ${selectedAction === 'check_in' ? 'حضورك' : 'انصرافك'} الساعة (${currentTimeStr}) ومزامنتها سحابياً مع شاشة الإدارة فوراً. تم رفع طلب الإذن للإدارة لاعتماده رسمياً.`,
+          type: 'warning',
+          record: newRecord,
+        });
+      } else {
+        setSubmissionResult({
+          success: true,
+          title: `تم تسجيل ${selectedAction === 'check_in' ? 'الحضور' : 'الانصراف'} بنجاح!`,
+          message: `أهلاً بك يا ${currentEmployee.name}، تم توثيق بصمتك في تمام الساعة (${currentTimeStr}) وإرسالها سحابياً لشاشة الإدارة فوراً.`,
+          type: 'success',
+          record: newRecord,
+        });
+      }
 
-    // Show friendly success confirmation with cloud sync badge
-    if (requiresPermission) {
+      setRequiresPermission(false);
+      setPermissionReason('');
+    } catch (err) {
+      console.warn('Direct cloud push encountered an issue, saving locally:', err);
+      onRecordSuccess(newRecord);
       setSubmissionResult({
         success: true,
-        title: 'تم إرسال الحركة مع طلب الإذن بنجاح',
-        message: `تم توثيق ${selectedAction === 'check_in' ? 'حضورك' : 'انصرافك'} الساعة (${currentTimeStr}) ومزامنتها سحابياً مع شاشة الإدارة. تم رفع طلب الإذن للإدارة لاعتماده رسمياً.`,
+        title: 'تم حفظ التسجيل محلياً على جهازك',
+        message: `تم توثيق بصمتك (${currentTimeStr}) على هذا الهاتف. سيتم رفعها لسحابة الإدارة تلقائياً عند استقرار الاتصال.`,
         type: 'warning',
         record: newRecord,
       });
-    } else {
-      setSubmissionResult({
-        success: true,
-        title: `تم تسجيل ${selectedAction === 'check_in' ? 'الحضور' : 'الانصراف'} بنجاح!`,
-        message: `أهلاً بك يا ${currentEmployee.name}، تم توثيق بصمتك في تمام الساعة (${currentTimeStr}) وإرسالها سحابياً لشاشة الإدارة فوراً.`,
-        type: 'success',
-        record: newRecord,
-      });
+      setRequiresPermission(false);
+      setPermissionReason('');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setRequiresPermission(false);
-    setPermissionReason('');
   };
 
   // Admin PIN verification
@@ -660,9 +685,9 @@ export const EmployeePortalPage: React.FC<EmployeePortalPageProps> = ({
               <button
                 type="submit"
                 id="portal-submit-registration"
-                disabled={isVerifyingGps}
+                disabled={isVerifyingGps || isSubmitting}
                 className={`w-full py-4 px-6 rounded-2xl text-white font-extrabold text-sm sm:text-base flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer ${
-                  isVerifyingGps
+                  isVerifyingGps || isSubmitting
                     ? 'bg-slate-400 cursor-not-allowed'
                     : selectedAction === 'check_in'
                     ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/25 active:scale-[0.99]'
@@ -673,6 +698,11 @@ export const EmployeePortalPage: React.FC<EmployeePortalPageProps> = ({
                   <>
                     <span className="w-5 h-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
                     <span>جارٍ التحقق من موقعك وتأكيد التسجيل...</span>
+                  </>
+                ) : isSubmitting ? (
+                  <>
+                    <span className="w-5 h-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    <span>جارٍ الرفع والمزامنة السحابية فوراً...</span>
                   </>
                 ) : (
                   <>

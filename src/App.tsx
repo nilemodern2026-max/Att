@@ -32,6 +32,7 @@ import {
   subscribeToCloudRecords,
   pushRecordToCloud,
   deleteRecordFromCloud,
+  syncUnsyncedLocalRecordsToCloud,
 } from './utils/firebase';
 
 export default function App() {
@@ -58,7 +59,7 @@ export default function App() {
 
   // Initialize data on mount + Apply Cross-Domain & QR Sync if present + Real-time Cloud Subscriptions
   const isInitialRecordsLoadRef = useRef(true);
-  const previousRecordCountRef = useRef(records.length);
+  const latestRecordSignatureRef = useRef<string>('');
 
   useEffect(() => {
     // 1. Check if URL contains sync payload from QR scan or Admin transfer
@@ -88,6 +89,9 @@ export default function App() {
     const initialLocalSettings = getStoredSettings();
     pushSettingsToCloud(initialLocalSettings).catch(() => {});
 
+    // Recover any local unsynced records to cloud
+    syncUnsyncedLocalRecordsToCloud().catch(() => {});
+
     // 2. Real-time Firebase Cloud Subscriptions
     const unsubSettings = subscribeToCloudSettings((cloudSettings) => {
       setSettings(cloudSettings);
@@ -103,25 +107,34 @@ export default function App() {
       setRecords(cloudRecords);
       setIsCloudConnected(true);
 
-      // If not initial load and a new record was received from cloud
-      if (!isInitialRecordsLoadRef.current && cloudRecords.length > previousRecordCountRef.current) {
-        const latestRecord = cloudRecords[0];
-        if (latestRecord) {
-          const actionText = latestRecord.checkOutTime && !latestRecord.checkInTime 
-            ? `تسجيل انصراف (${latestRecord.checkOutTime})` 
-            : latestRecord.checkInTime 
-            ? `تسجيل حضور (${latestRecord.checkInTime})` 
-            : 'تسجيل حركة';
-          
-          setSyncToast({
-            title: `🔔 حركة حضور وانصراف فورية!`,
-            desc: `قام الموظف (${latestRecord.employeeName}) بـ ${actionText}.`,
-          });
-          setTimeout(() => setSyncToast(null), 6000);
+      // If not initial load and a new record or updated record was received from cloud
+      const latestRecord = cloudRecords[0];
+      const currentSignature = latestRecord 
+        ? `${latestRecord.id}-${latestRecord.checkInTime || ''}-${latestRecord.checkOutTime || ''}-${latestRecord.status || ''}-${latestRecord.permissionStatus || ''}` 
+        : '';
+
+      if (!isInitialRecordsLoadRef.current && latestRecord && currentSignature !== latestRecordSignatureRef.current) {
+        let actionText = '';
+        if (latestRecord.hasPermissionRequest && latestRecord.permissionStatus === 'pending') {
+          actionText = `طلب إذن (${latestRecord.permissionReason || 'بانتظار موافقة الإدارة'})`;
+        } else if (latestRecord.checkOutTime && !latestRecord.checkInTime) {
+          actionText = `تسجيل انصراف (${latestRecord.checkOutTime})`;
+        } else if (latestRecord.checkInTime) {
+          actionText = `تسجيل حضور (${latestRecord.checkInTime})`;
+        } else {
+          actionText = 'تحديث حركة';
         }
+        
+        setSyncToast({
+          title: latestRecord.hasPermissionRequest && latestRecord.permissionStatus === 'pending'
+            ? `⚠️ طلب إذن جديد وارد الآن!`
+            : `🔔 حركة حضور فورية!`,
+          desc: `قام الموظف (${latestRecord.employeeName}) بـ ${actionText}.`,
+        });
+        setTimeout(() => setSyncToast(null), 6000);
       }
+      latestRecordSignatureRef.current = currentSignature;
       isInitialRecordsLoadRef.current = false;
-      previousRecordCountRef.current = cloudRecords.length;
     }, () => setIsCloudConnected(false));
 
     // Listen for storage updates across local tabs/windows as fallback
@@ -163,10 +176,9 @@ export default function App() {
     }
   };
 
-  // Today's pending permissions count for notification badge
-  const today = getTodayDateString();
+  // Pending permissions count for notification badge
   const pendingPermissionsCount = records.filter(
-    (r) => r.date === today && r.status === 'pending_permission' && r.permissionStatus === 'pending'
+    (r) => r.permissionStatus === 'pending' || r.status === 'pending_permission' || (r.hasPermissionRequest && !['approved', 'rejected'].includes(r.permissionStatus || ''))
   ).length;
 
   // Handlers for Records

@@ -54,6 +54,17 @@ const SETTINGS_DOC_REF = doc(db, 'settings', 'system_config');
 const EMPLOYEES_COLLECTION_REF = collection(db, 'employees');
 const RECORDS_COLLECTION_REF = collection(db, 'attendance_records');
 
+/**
+ * Deeply removes any `undefined` values from an object or array.
+ * Firestore setDoc strictly forbids `undefined` and throws an error if any field is undefined.
+ */
+export function sanitizeForFirestore<T>(data: T): T {
+  if (data === null || data === undefined) {
+    return null as unknown as T;
+  }
+  return JSON.parse(JSON.stringify(data));
+}
+
 // Enable offline caching if available in browser
 if (typeof window !== 'undefined') {
   try {
@@ -112,7 +123,8 @@ export function subscribeToCloudSettings(
 export async function pushSettingsToCloud(settings: SystemSettings): Promise<void> {
   saveSettings(settings); // update local cache immediately
   try {
-    await setDoc(SETTINGS_DOC_REF, settings, { merge: true });
+    const cleaned = sanitizeForFirestore(settings);
+    await setDoc(SETTINGS_DOC_REF, cleaned, { merge: true });
   } catch (err) {
     console.error('Failed to push settings to cloud:', err);
     throw err;
@@ -171,8 +183,9 @@ export function subscribeToCloudEmployees(
  */
 export async function pushEmployeeToCloud(employee: Employee): Promise<void> {
   try {
+    const cleaned = sanitizeForFirestore(employee);
     const docRef = doc(EMPLOYEES_COLLECTION_REF, employee.id);
-    await setDoc(docRef, employee, { merge: true });
+    await setDoc(docRef, cleaned, { merge: true });
   } catch (err) {
     console.error('Failed to push employee to cloud:', err);
     throw err;
@@ -221,10 +234,14 @@ export function subscribeToCloudRecords(
         });
       });
 
-      // Sort newest first
+      // Sort newest first: prefer ISO createdAt timestamp, fall back to date + checkIn/Out time
       records.sort((a, b) => {
-        const timeA = new Date(`${a.date} ${a.checkInTime || '00:00:00'}`).getTime() || 0;
-        const timeB = new Date(`${b.date} ${b.checkInTime || '00:00:00'}`).getTime() || 0;
+        const timeA = a.createdAt 
+          ? new Date(a.createdAt).getTime() 
+          : new Date(`${a.date} ${a.checkInTime || a.checkOutTime || '00:00:00'}`).getTime() || 0;
+        const timeB = b.createdAt 
+          ? new Date(b.createdAt).getTime() 
+          : new Date(`${b.date} ${b.checkInTime || b.checkOutTime || '00:00:00'}`).getTime() || 0;
         return timeB - timeA;
       });
 
@@ -243,8 +260,9 @@ export function subscribeToCloudRecords(
  */
 export async function pushRecordToCloud(record: AttendanceRecord): Promise<void> {
   try {
+    const cleaned = sanitizeForFirestore(record);
     const docRef = doc(RECORDS_COLLECTION_REF, record.id);
-    await setDoc(docRef, record, { merge: true });
+    await setDoc(docRef, cleaned, { merge: true });
   } catch (err) {
     console.error('Failed to push record to cloud:', err);
     throw err;
@@ -261,6 +279,30 @@ export async function deleteRecordFromCloud(recordId: string): Promise<void> {
   } catch (err) {
     console.error('Failed to delete record from cloud:', err);
     throw err;
+  }
+}
+
+/**
+ * Automatically sync any unsynced local records to Firestore
+ * This recovers any records that were saved locally when offline or during prior push issues
+ */
+export async function syncUnsyncedLocalRecordsToCloud(): Promise<number> {
+  try {
+    const localRecords = getStoredRecords();
+    if (!localRecords || localRecords.length === 0) return 0;
+
+    let synced = 0;
+    for (const rec of localRecords) {
+      try {
+        await pushRecordToCloud(rec);
+        synced++;
+      } catch (err) {
+        console.warn('Could not auto-sync local record to cloud:', rec.id, err);
+      }
+    }
+    return synced;
+  } catch {
+    return 0;
   }
 }
 

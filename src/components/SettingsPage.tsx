@@ -594,6 +594,31 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 </span>
               </div>
             </div>
+
+            {/* Custom Cloudflare Domain */}
+            <div className="pt-3 border-t border-slate-100">
+              <label className="block font-bold text-slate-800 mb-1">
+                رابط موقعك على كلاود فلير (Cloudflare Domain):
+              </label>
+              <div className="space-y-1.5">
+                <input
+                  type="text"
+                  value={formData.customCloudflareDomain || ''}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      customCloudflareDomain: e.target.value,
+                    }))
+                  }
+                  dir="ltr"
+                  placeholder="https://your-attendance-app.pages.dev"
+                  className="w-full sm:w-96 px-3 py-2 border border-slate-300 rounded-lg text-slate-900 bg-white font-mono text-xs focus:ring-2 focus:ring-emerald-500"
+                />
+                <p className="text-xs text-slate-500">
+                  * اختياري: إذا كنت تستخدم رابطاً على كلاود فلير، ضعه هنا ليتولد رمز الـ QR به دائماً. وإذا تركته فارغاً سيستخدم رابط الصفحة الحالي تلقائياً.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 

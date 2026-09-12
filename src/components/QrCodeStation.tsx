@@ -34,18 +34,28 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
   employees = [],
   records = [],
   onOpenEmployeePortal,
+  onSaveSettings,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [copied, setCopied] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [showPrintModal, setShowPrintModal] = useState(false);
+  const [isEditingDomain, setIsEditingDomain] = useState(false);
+  const [domainInput, setDomainInput] = useState(settings.customCloudflareDomain || '');
 
-  // Single unified direct Cloud Portal URL - Always uses the active live origin
+  // Single unified direct Cloud Portal URL - Respects custom Cloudflare domain if provided, or detected origin
   const detectedOrigin = typeof window !== 'undefined' ? window.location.origin : '';
   const portalUrl = useMemo(() => {
-    const base = detectedOrigin || (typeof window !== 'undefined' ? window.location.origin : '');
-    return `${base.replace(/\/+$/, '')}/?portal=1`;
-  }, [detectedOrigin]);
+    let base = detectedOrigin;
+    if (settings.customCloudflareDomain && settings.customCloudflareDomain.trim()) {
+      let custom = settings.customCloudflareDomain.trim();
+      if (!custom.startsWith('http://') && !custom.startsWith('https://')) {
+        custom = `https://${custom}`;
+      }
+      base = custom;
+    }
+    return `${(base || '').replace(/\/+$/, '')}/?portal=1`;
+  }, [detectedOrigin, settings.customCloudflareDomain]);
 
   // Generate QR Code onto canvas + high-resolution PNG Data URL
   useEffect(() => {
@@ -199,15 +209,86 @@ export const QrCodeStation: React.FC<QrCodeStationProps> = ({
             <span className="font-mono text-emerald-300 font-bold truncate select-all" dir="ltr">
               {portalUrl}
             </span>
+            {settings.customCloudflareDomain ? (
+              <span className="shrink-0 text-[10px] bg-orange-500/30 text-orange-200 border border-orange-400/40 px-2 py-0.5 rounded-md font-bold">
+                Cloudflare مخصص
+              </span>
+            ) : (
+              <span className="shrink-0 text-[10px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded-md font-medium">
+                النطاق الحالي
+              </span>
+            )}
           </div>
-          <button
-            onClick={handleCopy}
-            className="self-end sm:self-auto shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 border border-emerald-500/40 transition-colors"
-          >
-            {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-            <span>{copied ? 'تم النسخ' : 'نسخ الرابط'}</span>
-          </button>
+          <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
+            {onSaveSettings && (
+              <button
+                type="button"
+                onClick={() => setIsEditingDomain(!isEditingDomain)}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white/10 hover:bg-white/20 text-slate-200 transition-colors"
+              >
+                <span>{isEditingDomain ? 'إلغاء' : 'تغيير الرابط'}</span>
+              </button>
+            )}
+            <button
+              onClick={handleCopy}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-600/40 hover:bg-emerald-600/60 text-emerald-200 border border-emerald-500/40 transition-colors"
+            >
+              {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copied ? 'تم النسخ' : 'نسخ الرابط'}</span>
+            </button>
+          </div>
         </div>
+
+        {/* Optional Domain Customizer for Cloudflare */}
+        {isEditingDomain && onSaveSettings && (
+          <div className="bg-slate-800/80 p-3 rounded-xl border border-white/10 text-xs space-y-2 animate-in fade-in">
+            <label className="block text-slate-300 font-bold">
+              حدد رابط موقعك على كلاود فلير (Cloudflare Pages):
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                dir="ltr"
+                value={domainInput}
+                onChange={(e) => setDomainInput(e.target.value)}
+                placeholder="https://example.pages.dev"
+                className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white font-mono text-xs focus:outline-hidden focus:border-emerald-500"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  onSaveSettings({
+                    ...settings,
+                    customCloudflareDomain: domainInput.trim(),
+                  });
+                  setIsEditingDomain(false);
+                }}
+                className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-lg transition-colors shrink-0"
+              >
+                حفظ الرابط
+              </button>
+              {settings.customCloudflareDomain && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDomainInput('');
+                    onSaveSettings({
+                      ...settings,
+                      customCloudflareDomain: '',
+                    });
+                    setIsEditingDomain(false);
+                  }}
+                  className="px-3 py-2 bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-800 rounded-lg transition-colors shrink-0"
+                >
+                  استعادة الافتراضي
+                </button>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-400">
+              * إذا كنت تفتح لوحة الإدارة من مكان مختلف وتريد لافتة الباركود المطبوعة للموظفين أن تفتح رابط كلاود فلير مباشرة.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Programmed Data Verification Banner */}
