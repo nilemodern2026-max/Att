@@ -243,9 +243,12 @@ export function generateQrPosterHtml(params: {
 <body>
   <div class="poster-card">
     <div style="display: flex; justify-content: center; margin-bottom: 12px;">
-      <div style="width: 56px; height: 56px; border-radius: 14px; background: linear-gradient(135deg, #059669, #0f172a); display: flex; align-items: center; justify-content: center; color: white; font-size: 24px; font-weight: 900; box-shadow: 0 4px 10px rgba(5,150,105,0.25);">
-        🏢
-      </div>
+      <img 
+        src="https://i.ibb.co/Qv4gxzG2/122.png" 
+        alt="${companyName || 'شعار الشركة'}" 
+        class="poster-logo" 
+        style="width: 72px; height: 72px; object-fit: contain; border-radius: 14px; background: #ffffff; padding: 4px; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.06);"
+      />
     </div>
     <div class="company-badge">نقطة البصمة الذكية المعتمدة</div>
     <h1 class="company-name">${companyName || 'نظام تسجيل الحضور والانصراف'}</h1>
