@@ -8,9 +8,11 @@ import {
   onSnapshot, 
   getDoc,
   getDocs,
+  getDocFromServer,
   enableIndexedDbPersistence
 } from 'firebase/firestore';
 import { Employee, AttendanceRecord, SystemSettings } from '../types';
+import firebaseAppletConfig from '../../firebase-applet-config.json';
 import { 
   DEFAULT_SETTINGS, 
   saveSettings, 
@@ -23,13 +25,13 @@ import {
 
 // Firebase Client Configuration
 export const firebaseConfig = {
-  projectId: "ai-studio-applet-webapp-ceedb",
-  appId: "1:657921917073:web:0d3a861a153bd3c2d33f30",
-  apiKey: "AIzaSyCYViM7Vpt01fOGaTpUIXZPc65fkOs6mnc",
-  authDomain: "ai-studio-applet-webapp-ceedb.firebaseapp.com",
-  firestoreDatabaseId: "ai-studio-att-d446b4ef-47dc-4bff-8473-3579e810cd2e",
-  storageBucket: "ai-studio-applet-webapp-ceedb.firebasestorage.app",
-  messagingSenderId: "657921917073",
+  projectId: firebaseAppletConfig.projectId || "ai-studio-applet-webapp-ceedb",
+  appId: firebaseAppletConfig.appId || "1:657921917073:web:0d3a861a153bd3c2d33f30",
+  apiKey: firebaseAppletConfig.apiKey || "AIzaSyCYViM7Vpt01fOGaTpUIXZPc65fkOs6mnc",
+  authDomain: firebaseAppletConfig.authDomain || "ai-studio-applet-webapp-ceedb.firebaseapp.com",
+  firestoreDatabaseId: firebaseAppletConfig.firestoreDatabaseId || "ai-studio-att-d446b4ef-47dc-4bff-8473-3579e810cd2e",
+  storageBucket: firebaseAppletConfig.storageBucket || "ai-studio-applet-webapp-ceedb.firebasestorage.app",
+  messagingSenderId: firebaseAppletConfig.messagingSenderId || "657921917073",
 };
 
 // Initialize Firebase App
@@ -37,6 +39,15 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
 // Initialize Firestore with specific database ID
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+// Validate connection to Firestore on boot
+if (typeof window !== 'undefined') {
+  getDocFromServer(doc(db, 'test', 'connection')).catch((error) => {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.warn('Firebase client is offline or waiting for connection.');
+    }
+  });
+}
 
 // Cloud Collections
 const SETTINGS_DOC_REF = doc(db, 'settings', 'system_config');

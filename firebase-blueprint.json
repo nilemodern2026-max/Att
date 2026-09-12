@@ -1,0 +1,79 @@
+{
+  "entities": {
+    "SystemSettings": {
+      "title": "SystemSettings",
+      "description": "System settings and company configuration",
+      "type": "object",
+      "properties": {
+        "companyName": { "type": "string", "maxLength": 200 },
+        "location": { "type": "object" },
+        "hours": { "type": "object" },
+        "autoApproveWithinRange": { "type": "boolean" },
+        "requireGps": { "type": "boolean" },
+        "deviceBindingEnabled": { "type": "boolean" },
+        "adminPin": { "type": "string", "maxLength": 32 }
+      },
+      "required": ["companyName"]
+    },
+    "Employee": {
+      "title": "Employee",
+      "description": "Company employee record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 200 },
+        "code": { "type": "string", "maxLength": 50 },
+        "department": { "type": "string", "maxLength": 100 },
+        "position": { "type": "string", "maxLength": 100 },
+        "phone": { "type": "string", "maxLength": 50 },
+        "nationalId": { "type": "string", "maxLength": 50 },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "boundDeviceId": { "type": "string", "maxLength": 128 },
+        "boundDeviceName": { "type": "string", "maxLength": 128 },
+        "boundAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "name", "code"]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "Employee attendance record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "employeeId": { "type": "string", "maxLength": 128 },
+        "employeeCode": { "type": "string", "maxLength": 50 },
+        "employeeName": { "type": "string", "maxLength": 200 },
+        "department": { "type": "string", "maxLength": 100 },
+        "date": { "type": "string", "maxLength": 30 },
+        "checkInTime": { "type": "string", "maxLength": 30 },
+        "checkOutTime": { "type": "string", "maxLength": 30 },
+        "checkInDistance": { "type": "number" },
+        "checkOutDistance": { "type": "number" },
+        "status": { "type": "string", "maxLength": 50 },
+        "permissionStatus": { "type": "string", "maxLength": 50 },
+        "permissionReason": { "type": "string", "maxLength": 500 },
+        "permissionRequestedAt": { "type": "string", "maxLength": 50 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "deviceId": { "type": "string", "maxLength": 128 },
+        "deviceName": { "type": "string", "maxLength": 128 },
+        "verifiedGps": { "type": "boolean" }
+      },
+      "required": ["id", "employeeId", "employeeName", "date"]
+    }
+  },
+  "firestore": {
+    "/settings/{settingId}": {
+      "schema": "SystemSettings",
+      "description": "Global application configuration document"
+    },
+    "/employees/{employeeId}": {
+      "schema": "Employee",
+      "description": "Employee profiles and bound devices"
+    },
+    "/attendance_records/{recordId}": {
+      "schema": "AttendanceRecord",
+      "description": "Daily employee attendance logs and permissions"
+    }
+  }
+}
