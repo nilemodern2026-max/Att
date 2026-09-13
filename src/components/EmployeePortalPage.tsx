@@ -32,7 +32,7 @@ import {
   getOrCreateDeviceId,
   getDeviceName
 } from '../utils/storage';
-import { pushRecordToCloud, pushEmployeeToCloud, syncUnsyncedLocalRecordsToCloud } from '../utils/firebase';
+import { pushRecordToCloud, bindEmployeeDeviceInCloud, syncUnsyncedLocalRecordsToCloud } from '../utils/firebase';
 
 interface EmployeePortalPageProps {
   employees: Employee[];
@@ -126,7 +126,9 @@ export const EmployeePortalPage: React.FC<EmployeePortalPageProps> = ({
 
   // Today's existing record for this employee
   const todayRecord = currentEmployee
-    ? records.find((r) => r.employeeId === currentEmployee.id && r.date === today)
+    ? records.find(
+        (r) => (r.employeeId === currentEmployee.id || r.employeeCode === currentEmployee.code) && r.date === today
+      )
     : undefined;
 
   const alreadyCheckedIn = !!todayRecord?.checkInTime;
@@ -229,7 +231,7 @@ export const EmployeePortalPage: React.FC<EmployeePortalPageProps> = ({
           boundAt: new Date().toISOString(),
         };
         onUpdateEmployee(boundEmployee);
-        pushEmployeeToCloud(boundEmployee).catch(console.error);
+        bindEmployeeDeviceInCloud(currentEmployee.id, currentDeviceId, currentDeviceName).catch(console.error);
       }
     }
 
@@ -405,7 +407,8 @@ export const EmployeePortalPage: React.FC<EmployeePortalPageProps> = ({
       setPermissionReason('');
     } catch (err) {
       console.warn('Direct cloud push encountered an issue, saving locally:', err);
-      onRecordSuccess(newRecord);
+      const offlineRecord: AttendanceRecord = { ...newRecord, isUnsynced: true };
+      onRecordSuccess(offlineRecord);
       setSubmissionResult({
         success: true,
         title: 'تم حفظ التسجيل محلياً على جهازك',

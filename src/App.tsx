@@ -81,17 +81,6 @@ export default function App() {
       setTimeout(() => setSyncToast(null), 5000);
     }
 
-    // Auto-seed current local employees & settings to Firestore if needed
-    const initialLocalEmps = getStoredEmployees();
-    if (initialLocalEmps.length > 0) {
-      initialLocalEmps.forEach((emp) => pushEmployeeToCloud(emp).catch(() => {}));
-    }
-    // Recover any local unsynced records to cloud
-    syncUnsyncedLocalRecordsToCloud().catch(() => {});
-
-    // Recover any local unsynced records to cloud
-    syncUnsyncedLocalRecordsToCloud().catch(() => {});
-
     // 2. Real-time Firebase Cloud Subscriptions
     const unsubSettings = subscribeToCloudSettings((cloudSettings) => {
       setSettings(cloudSettings);
@@ -240,11 +229,12 @@ export default function App() {
     saveRecords(updatedRecs);
   };
 
-  const handleDeleteEmployee = (id: string) => {
-    const updated = employees.filter((e) => e.id !== id);
+  const handleDeleteEmployee = (id: string, code?: string) => {
+    const targetCode = code || employees.find((e) => e.id === id)?.code;
+    const updated = employees.filter((e) => e.id !== id && (!targetCode || e.code !== targetCode));
     setEmployees(updated);
     saveEmployees(updated);
-    deleteEmployeeFromCloud(id).catch(console.error);
+    deleteEmployeeFromCloud(id, targetCode).catch(console.error);
   };
 
   const handleDeleteRecord = (id: string) => {

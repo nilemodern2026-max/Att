@@ -4,11 +4,14 @@ import {
   collection, 
   doc, 
   setDoc, 
+  updateDoc,
   deleteDoc, 
   onSnapshot, 
   getDoc,
   getDocs,
   getDocFromServer,
+  query,
+  where,
   enableIndexedDbPersistence
 } from 'firebase/firestore';
 import { Employee, AttendanceRecord, SystemSettings } from '../types';
@@ -104,9 +107,9 @@ export function subscribeToCloudSettings(
         saveSettings(merged, false); // Cache locally without duplicate synthetic dispatch
         onUpdate(merged);
       } else {
-        // If settings not yet in cloud, seed them with current stored settings
+        // If settings doc does not exist yet, NEVER push default settings from client subscription!
+        // Doing so from a client or employee phone would overwrite the real company settings!
         const currentStored = typeof window !== 'undefined' ? (getStoredSettings?.() || DEFAULT_SETTINGS) : DEFAULT_SETTINGS;
-        pushSettingsToCloud(currentStored).catch(console.error);
         onUpdate(currentStored);
       }
     },
@@ -142,26 +145,38 @@ export function subscribeToCloudEmployees(
     EMPLOYEES_COLLECTION_REF,
     (snapshot) => {
       if (snapshot.empty) {
-        // Prevent clearing local employees if cloud is newly provisioned!
-        const localEmployees = getStoredEmployees();
-        if (localEmployees.length > 0) {
-          console.info('Cloud employees collection is empty, auto-seeding with local employees:', localEmployees.length);
-          localEmployees.forEach((emp) => pushEmployeeToCloud(emp).catch(console.error));
-          onUpdate(localEmployees);
-          return;
-        }
+        // Cloud collection is empty - do NOT auto-seed from local storage as that resurrects deleted employees!
+        saveEmployees([]);
+        onUpdate([]);
+        return;
       }
 
-      const employees: Employee[] = [];
+      const employeesMap = new Map<string, Employee>();
       snapshot.forEach((docSnap) => {
         const data = docSnap.data() as Employee;
-        employees.push({
+        const emp: Employee = {
           ...data,
           id: docSnap.id,
-        });
+        };
+        const codeKey = (emp.code || '').trim();
+        if (codeKey) {
+          const existing = employeesMap.get(codeKey);
+          if (!existing) {
+            employeesMap.set(codeKey, emp);
+          } else {
+            // Keep the one with active device binding or preferred record
+            if (!existing.boundDeviceId && emp.boundDeviceId) {
+              employeesMap.set(codeKey, emp);
+            }
+          }
+        } else {
+          employeesMap.set(docSnap.id, emp);
+        }
       });
 
-      // Sort by code or creation
+      const employees: Employee[] = Array.from(employeesMap.values());
+
+      // Sort by code
       employees.sort((a, b) => {
         const numA = parseInt(a.code, 10) || 0;
         const numB = parseInt(b.code, 10) || 0;
@@ -193,12 +208,47 @@ export async function pushEmployeeToCloud(employee: Employee): Promise<void> {
 }
 
 /**
- * Delete employee from Cloud
+ * Safely bind device to employee without resurrecting a deleted employee document
  */
-export async function deleteEmployeeFromCloud(employeeId: string): Promise<void> {
+export async function bindEmployeeDeviceInCloud(
+  employeeId: string,
+  deviceId: string,
+  deviceName: string
+): Promise<void> {
+  try {
+    const docRef = doc(EMPLOYEES_COLLECTION_REF, employeeId);
+    await updateDoc(docRef, {
+      boundDeviceId: deviceId,
+      boundDeviceName: deviceName,
+      boundAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.warn('Could not bind employee device in cloud (employee may have been deleted):', err);
+  }
+}
+
+/**
+ * Delete employee from Cloud (with cleanup of duplicate ghost documents matching the same code)
+ */
+export async function deleteEmployeeFromCloud(employeeId: string, employeeCode?: string): Promise<void> {
   try {
     const docRef = doc(EMPLOYEES_COLLECTION_REF, employeeId);
     await deleteDoc(docRef);
+
+    // If an employee code is provided, also purge any orphan/duplicate docs with that same code
+    if (employeeCode && employeeCode.trim()) {
+      try {
+        const q = query(EMPLOYEES_COLLECTION_REF, where('code', '==', employeeCode.trim()));
+        const snap = await getDocs(q);
+        for (const d of snap.docs) {
+          if (d.id !== employeeId) {
+            await deleteDoc(d.ref).catch(() => {});
+          }
+        }
+      } catch (qErr) {
+        console.warn('Could not check duplicates for deleted employee:', qErr);
+      }
+    }
   } catch (err) {
     console.error('Failed to delete employee from cloud:', err);
     throw err;
@@ -216,13 +266,9 @@ export function subscribeToCloudRecords(
     RECORDS_COLLECTION_REF,
     (snapshot) => {
       if (snapshot.empty) {
-        const localRecords = getStoredRecords();
-        if (localRecords.length > 0) {
-          console.info('Cloud records collection is empty, auto-seeding with local records:', localRecords.length);
-          localRecords.forEach((rec) => pushRecordToCloud(rec).catch(console.error));
-          onUpdate(localRecords);
-          return;
-        }
+        saveRecords([]);
+        onUpdate([]);
+        return;
       }
 
       const records: AttendanceRecord[] = [];
@@ -293,11 +339,15 @@ export async function syncUnsyncedLocalRecordsToCloud(): Promise<number> {
 
     let synced = 0;
     for (const rec of localRecords) {
-      try {
-        await pushRecordToCloud(rec);
-        synced++;
-      } catch (err) {
-        console.warn('Could not auto-sync local record to cloud:', rec.id, err);
+      if ((rec as any).isUnsynced === true) {
+        try {
+          const cleanRec = { ...rec };
+          delete (cleanRec as any).isUnsynced;
+          await pushRecordToCloud(cleanRec);
+          synced++;
+        } catch (err) {
+          console.warn('Could not auto-sync local record to cloud:', rec.id, err);
+        }
       }
     }
     return synced;

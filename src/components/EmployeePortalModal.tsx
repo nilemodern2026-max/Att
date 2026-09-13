@@ -84,7 +84,9 @@ export const EmployeePortalModal: React.FC<EmployeePortalModalProps> = ({
 
   // Today's existing record for this employee
   const todayRecord = currentEmployee
-    ? records.find((r) => r.employeeId === currentEmployee.id && r.date === today)
+    ? records.find(
+        (r) => (r.employeeId === currentEmployee.id || r.employeeCode === currentEmployee.code) && r.date === today
+      )
     : undefined;
 
   // Check duplicate attendance rule

@@ -22,7 +22,7 @@ interface EmployeesManagementProps {
   employees: Employee[];
   onAddEmployee: (employee: Employee) => void;
   onUpdateEmployee: (employee: Employee) => void;
-  onDeleteEmployee: (id: string) => void;
+  onDeleteEmployee: (id: string, code?: string) => void;
 }
 
 export const EmployeesManagement: React.FC<EmployeesManagementProps> = ({
@@ -157,7 +157,7 @@ export const EmployeesManagement: React.FC<EmployeesManagementProps> = ({
   const handleConfirmDelete = () => {
     if (!employeeToDelete) return;
     const deletedName = employeeToDelete.name;
-    onDeleteEmployee(employeeToDelete.id);
+    onDeleteEmployee(employeeToDelete.id, employeeToDelete.code);
     setEmployeeToDelete(null);
     showToast(`تم حذف الموظف "${deletedName}" نهائياً.`);
   };

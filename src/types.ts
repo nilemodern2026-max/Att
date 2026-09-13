@@ -61,6 +61,7 @@ export interface AttendanceRecord {
   rejectionReason?: string;
 
   notes?: string;
+  isUnsynced?: boolean;
   createdAt: string;
 }
 
