@@ -47,6 +47,34 @@ export const TodayDashboard: React.FC<TodayDashboardProps> = ({
   const [manualNotes, setManualNotes] = useState<string>('تسجيل يدوي بواسطة الإدارة');
   const [recordToDelete, setRecordToDelete] = useState<{ id: string; name: string } | null>(null);
 
+  // Permission decision note modal state
+  const [permissionDecisionTarget, setPermissionDecisionTarget] = useState<{
+    record: AttendanceRecord;
+    decision: 'approved' | 'rejected';
+  } | null>(null);
+  const [decisionNotes, setDecisionNotes] = useState<string>('');
+
+  const openDecisionModal = (record: AttendanceRecord, decision: 'approved' | 'rejected') => {
+    setPermissionDecisionTarget({ record, decision });
+    setDecisionNotes(
+      decision === 'approved'
+        ? 'تمت الموافقة على طلب الإذن واحتساب الحضور نظامياً'
+        : 'تم رفض طلب الإذن واحتساب اليوم غياب/مخالفة'
+    );
+  };
+
+  const confirmPermissionDecision = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!permissionDecisionTarget) return;
+    handlePermissionDecision(
+      permissionDecisionTarget.record,
+      permissionDecisionTarget.decision,
+      decisionNotes.trim()
+    );
+    setPermissionDecisionTarget(null);
+    setDecisionNotes('');
+  };
+
   // Today's date string
   const today = getTodayDateString();
 
@@ -381,7 +409,7 @@ export const TodayDashboard: React.FC<TodayDashboardProps> = ({
                     <div className="flex items-center gap-2 shrink-0">
                       <button
                         id={`approve-perm-${rec.id}`}
-                        onClick={() => handlePermissionDecision(rec, 'approved')}
+                        onClick={() => openDecisionModal(rec, 'approved')}
                         className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors"
                       >
                         <Check className="w-4 h-4" />
@@ -389,7 +417,7 @@ export const TodayDashboard: React.FC<TodayDashboardProps> = ({
                       </button>
                       <button
                         id={`reject-perm-${rec.id}`}
-                        onClick={() => handlePermissionDecision(rec, 'rejected')}
+                        onClick={() => openDecisionModal(rec, 'rejected')}
                         className="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors"
                       >
                         <X className="w-4 h-4" />
@@ -620,16 +648,16 @@ export const TodayDashboard: React.FC<TodayDashboardProps> = ({
                           {rec?.status === 'pending_permission' ? (
                             <div className="flex items-center gap-1">
                               <button
-                                onClick={() => handlePermissionDecision(rec, 'approved')}
+                                onClick={() => openDecisionModal(rec, 'approved')}
                                 className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors shadow-2xs"
-                                title="موافقة على الإذن"
+                                title="موافقة على الإذن مع كتابة ملاحظة"
                               >
                                 قبول
                               </button>
                               <button
-                                onClick={() => handlePermissionDecision(rec, 'rejected')}
+                                onClick={() => openDecisionModal(rec, 'rejected')}
                                 className="px-2.5 py-1 bg-rose-600 text-white rounded-lg text-xs font-bold hover:bg-rose-700 transition-colors shadow-2xs"
-                                title="رفض الإذن"
+                                title="رفض الإذن مع كتابة ملاحظة"
                               >
                                 رفض
                               </button>
@@ -757,6 +785,122 @@ export const TodayDashboard: React.FC<TodayDashboardProps> = ({
                   className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-sm"
                 >
                   حفظ الحركة الآن
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Permission Decision Modal with Note */}
+      {permissionDecisionTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 text-right space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
+                    permissionDecisionTarget.decision === 'approved'
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : 'bg-rose-100 text-rose-700'
+                  }`}
+                >
+                  {permissionDecisionTarget.decision === 'approved' ? (
+                    <Check className="w-5 h-5" />
+                  ) : (
+                    <X className="w-5 h-5" />
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">
+                    {permissionDecisionTarget.decision === 'approved'
+                      ? 'اعتماد والموافقة على طلب الإذن'
+                      : 'رفض طلب الإذن واحتساب غياب'}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    للموظف: <strong className="text-slate-800">{permissionDecisionTarget.record.employeeName}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPermissionDecisionTarget(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Request Summary */}
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-slate-500">كود الموظف:</span>
+                <span className="font-mono font-bold text-slate-800">{permissionDecisionTarget.record.employeeCode}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">نوع الإذن:</span>
+                <span className="font-bold text-slate-800">
+                  {permissionDecisionTarget.record.permissionType === 'check_out' ? 'إذن انصراف مبكر' : 'إذن تأخير في الحضور'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">وقت التسجيل:</span>
+                <span className="font-mono font-bold text-slate-800" dir="ltr">
+                  {permissionDecisionTarget.record.checkInTime || permissionDecisionTarget.record.checkOutTime || '---'}
+                </span>
+              </div>
+              <div className="pt-1.5 border-t border-slate-200">
+                <span className="text-slate-500 block mb-0.5">السبب المدون من الموظف:</span>
+                <p className="font-semibold text-slate-800 bg-white p-2 rounded-lg border border-slate-200">
+                  "{permissionDecisionTarget.record.permissionReason || 'لم يذكر سبب محدد'}"
+                </p>
+              </div>
+            </div>
+
+            {/* Note input form */}
+            <form onSubmit={confirmPermissionDecision} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  ملاحظات الإدارة على القرار (تظهر بالتقارير وملف الإكسيل):
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={decisionNotes}
+                  onChange={(e) => setDecisionNotes(e.target.value)}
+                  placeholder="اكتب ملاحظاتك أو توجيهك للموظف هنا..."
+                  className="w-full p-3 text-xs border border-slate-300 rounded-xl text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setPermissionDecisionTarget(null)}
+                  className="px-4 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-semibold text-xs transition-colors"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className={`px-5 py-2 text-white font-bold text-xs rounded-xl shadow-xs inline-flex items-center gap-1.5 transition-colors ${
+                    permissionDecisionTarget.decision === 'approved'
+                      ? 'bg-emerald-600 hover:bg-emerald-700'
+                      : 'bg-rose-600 hover:bg-rose-700'
+                  }`}
+                >
+                  {permissionDecisionTarget.decision === 'approved' ? (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>تأكيد الموافقة على الإذن</span>
+                    </>
+                  ) : (
+                    <>
+                      <X className="w-4 h-4" />
+                      <span>تأكيد الرفض مع الملاحظة</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

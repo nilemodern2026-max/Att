@@ -17,6 +17,7 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { Employee } from '../types';
+import { unbindEmployeeDeviceInCloud } from '../utils/firebase';
 
 interface EmployeesManagementProps {
   employees: Employee[];
@@ -63,13 +64,15 @@ export const EmployeesManagement: React.FC<EmployeesManagementProps> = ({
   // Reset employee device lock
   const handleConfirmResetDevice = () => {
     if (!deviceResetTarget) return;
+    const target = deviceResetTarget;
     onUpdateEmployee({
-      ...deviceResetTarget,
+      ...target,
       boundDeviceId: undefined,
       boundDeviceName: undefined,
       boundAt: undefined,
     });
-    showToast(`تم فك قفل هاتف الموظف (${deviceResetTarget.name}) بنجاح. سيتمكن من ربط هاتفه الجديد عند البصمة القادمة.`);
+    unbindEmployeeDeviceInCloud(target.id, target.code).catch(console.error);
+    showToast(`تم فك قفل هاتف الموظف (${target.name}) بنجاح. سيتمكن من ربط هاتفه الجديد عند البصمة القادمة.`);
     setDeviceResetTarget(null);
   };
 

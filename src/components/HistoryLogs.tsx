@@ -23,7 +23,7 @@ import {
   getPermissionDetail,
   printAttendanceReport 
 } from '../utils/export';
-import { getTodayDateString } from '../utils/storage';
+import { getTodayDateString, getStoredSettings } from '../utils/storage';
 
 interface HistoryLogsProps {
   records: AttendanceRecord[];
@@ -81,9 +81,88 @@ export const HistoryLogs: React.FC<HistoryLogsProps> = ({
     setSearchTerm('');
   };
 
-  // Filtered Records
+  // Combine recorded attendance with calculated absence days for all active employees
+  const allRecordsWithAbsence = useMemo(() => {
+    // 1. Gather all dates in scope:
+    const dateSet = new Set<string>();
+
+    if (startDate && endDate) {
+      // If date range is selected, iterate over each date in range
+      const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+      const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+      const curr = new Date(startYear, startMonth - 1, startDay);
+      const end = new Date(endYear, endMonth - 1, endDay);
+      while (curr <= end) {
+        const y = curr.getFullYear();
+        const m = String(curr.getMonth() + 1).padStart(2, '0');
+        const d = String(curr.getDate()).padStart(2, '0');
+        dateSet.add(`${y}-${m}-${d}`);
+        curr.setDate(curr.getDate() + 1);
+      }
+    } else {
+      // Collect dates from actual records
+      records.forEach((r) => {
+        if (r.date) dateSet.add(r.date);
+      });
+      // Include today
+      dateSet.add(today);
+    }
+
+    const settings = getStoredSettings();
+    const workingDays = settings?.hours?.workingDays || [0, 1, 2, 3, 4]; // Default Sun-Thu
+    const activeEmployees = employees.filter((e) => e.isActive !== false);
+
+    // Map of existing employee records by employee ID / code and date
+    const existingMap = new Map<string, AttendanceRecord>();
+    records.forEach((r) => {
+      existingMap.set(`${r.employeeId}_${r.date}`, r);
+      if (r.employeeCode) {
+        existingMap.set(`code_${r.employeeCode}_${r.date}`, r);
+      }
+    });
+
+    const combined: AttendanceRecord[] = [...records];
+
+    dateSet.forEach((dateStr) => {
+      // Do not mark absence for future dates
+      if (dateStr > today) return;
+
+      // Check if day is a working day or if there are already records on this date
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const dObj = new Date(y, m - 1, d);
+      const dayOfWeek = dObj.getDay();
+      const isWorkingDay = workingDays.includes(dayOfWeek);
+      const hasRecordsOnDate = records.some((r) => r.date === dateStr);
+
+      if (!isWorkingDay && !hasRecordsOnDate) return;
+
+      activeEmployees.forEach((emp) => {
+        // Skip if employee joined after this date
+        if (emp.joinDate && emp.joinDate > dateStr) return;
+
+        const hasRecord = existingMap.has(`${emp.id}_${dateStr}`) || existingMap.has(`code_${emp.code}_${dateStr}`);
+        if (!hasRecord) {
+          combined.push({
+            id: `absent-${emp.id}-${dateStr}`,
+            employeeId: emp.id,
+            employeeCode: emp.code,
+            employeeName: emp.name,
+            department: emp.department,
+            date: dateStr,
+            status: 'absent',
+            notes: 'لم يسجل حضور (غياب)',
+            createdAt: `${dateStr}T00:00:00.000Z`,
+          });
+        }
+      });
+    });
+
+    return combined;
+  }, [records, employees, startDate, endDate, today]);
+
+  // Filtered Records (including accurate absence entries)
   const filteredRecords = useMemo(() => {
-    return records.filter((rec) => {
+    return allRecordsWithAbsence.filter((rec) => {
       // Date Range
       if (startDate && rec.date < startDate) return false;
       if (endDate && rec.date > endDate) return false;
@@ -116,7 +195,7 @@ export const HistoryLogs: React.FC<HistoryLogsProps> = ({
 
       return true;
     }).sort((a, b) => (b.date + (b.checkInTime || '')).localeCompare(a.date + (a.checkInTime || '')));
-  }, [records, startDate, endDate, selectedEmployeeId, selectedStatus, attendanceTypeFilter, searchTerm]);
+  }, [allRecordsWithAbsence, startDate, endDate, selectedEmployeeId, selectedStatus, attendanceTypeFilter, searchTerm]);
 
   // Statistics for the filtered view
   const stats = useMemo(() => {
@@ -548,14 +627,18 @@ export const HistoryLogs: React.FC<HistoryLogsProps> = ({
                       {/* Delete Record Button */}
                       {onDeleteRecord && (
                         <td className="py-3 px-3 text-center">
-                          <button
-                            type="button"
-                            onClick={() => setRecordToDelete(r)}
-                            title="حذف هذا السجل"
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors inline-flex items-center"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {!r.id.startsWith('absent-') ? (
+                            <button
+                              type="button"
+                              onClick={() => setRecordToDelete(r)}
+                              title="حذف هذا السجل"
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors inline-flex items-center"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-300">---</span>
+                          )}
                         </td>
                       )}
                     </tr>

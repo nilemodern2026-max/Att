@@ -134,16 +134,62 @@ export function exportRecordsToFormattedExcel(
    <Font ss:FontName="Arial" x:CharSet="178" ss:Size="10" ss:Bold="1" ss:Color="#BE123C"/>
    <Interior ss:Color="#FFF1F2" ss:Pattern="Solid"/>
   </Style>
-  <Style ss:ID="DataCellPermission">
+  <Style ss:ID="DataCellAbsentBold">
    <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:ReadingOrder="RightToLeft"/>
    <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FED7AA"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FED7AA"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FED7AA"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FED7AA"/>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FECDD3"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FECDD3"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FECDD3"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FECDD3"/>
    </Borders>
-   <Font ss:FontName="Arial" x:CharSet="178" ss:Size="10" ss:Color="#9A3412"/>
-   <Interior ss:Color="#FFFBEB" ss:Pattern="Solid"/>
+   <Font ss:FontName="Arial" x:CharSet="178" ss:Size="10" ss:Bold="1" ss:Color="#9F1239"/>
+   <Interior ss:Color="#FFF1F2" ss:Pattern="Solid"/>
+  </Style>
+  <!-- تظليل أيام التأخير باللون الأحمر المريح -->
+  <Style ss:ID="DataCellLate">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:ReadingOrder="RightToLeft"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FECDD3"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FECDD3"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FECDD3"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FECDD3"/>
+   </Borders>
+   <Font ss:FontName="Arial" x:CharSet="178" ss:Size="10" ss:Color="#991B1B"/>
+   <Interior ss:Color="#FEE2E2" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="DataCellLateBold">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:ReadingOrder="RightToLeft"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FECDD3"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FECDD3"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FECDD3"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FECDD3"/>
+   </Borders>
+   <Font ss:FontName="Arial" x:CharSet="178" ss:Size="10" ss:Bold="1" ss:Color="#7F1D1D"/>
+   <Interior ss:Color="#FEE2E2" ss:Pattern="Solid"/>
+  </Style>
+  <!-- تظليل أيام الإذن باللون الأصفر الواضح -->
+  <Style ss:ID="DataCellPermissionYellow">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:ReadingOrder="RightToLeft"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FDE047"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FDE047"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FDE047"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FDE047"/>
+   </Borders>
+   <Font ss:FontName="Arial" x:CharSet="178" ss:Size="10" ss:Color="#854D0E"/>
+   <Interior ss:Color="#FEF9C3" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="DataCellPermissionYellowBold">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:ReadingOrder="RightToLeft"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FDE047"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FDE047"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FDE047"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FDE047"/>
+   </Borders>
+   <Font ss:FontName="Arial" x:CharSet="178" ss:Size="10" ss:Bold="1" ss:Color="#713F12"/>
+   <Interior ss:Color="#FEF9C3" ss:Pattern="Solid"/>
   </Style>
   <Style ss:ID="DataCellTime">
    <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:ReadingOrder="LeftToRight"/>
@@ -200,23 +246,61 @@ export function exportRecordsToFormattedExcel(
 
    <!-- Data Rows -->
    ${records.map((r) => {
+     const settings = getStoredSettings();
      const isAbsent = r.status === 'absent' || r.status === 'rejected_permission';
-     const hasPerm = r.hasPermissionRequest || Boolean(r.permissionReason);
+
+     // أيام التأخير: تأخير بإذن أو حضور بعد نهاية نافذة الحضور المقررة أو إذن تأخير
+     const isLate = !isAbsent && (
+       r.status === 'late_with_permission' ||
+       Boolean(r.checkInTime && settings?.hours?.checkInEnd && r.checkInTime > settings.hours.checkInEnd) ||
+       Boolean(r.permissionType === 'check_in') ||
+       Boolean(r.permissionReason && r.permissionReason.toLowerCase().includes('تأخير'))
+     );
+
+     // أيام الإذن: إذن انصراف مبكر أو طلب إذن معتمد أو قيد المراجعة
+     const isPermission = !isAbsent && !isLate && (
+       r.hasPermissionRequest || 
+       Boolean(r.permissionReason) || 
+       r.status === 'early_with_permission' || 
+       r.status === 'pending_permission'
+     );
+
+     let cellStyle = 'DataCell';
+     let boldStyle = 'DataCellBold';
+     let timeStyle = 'DataCellTime';
+
+     if (isLate) {
+       // تظليل كامل خلايا الصف باللون الأحمر لأيام التأخير
+       cellStyle = 'DataCellLate';
+       boldStyle = 'DataCellLateBold';
+       timeStyle = 'DataCellLate';
+     } else if (isPermission) {
+       // تظليل كامل خلايا الصف باللون الأصفر لأيام الإذن
+       cellStyle = 'DataCellPermissionYellow';
+       boldStyle = 'DataCellPermissionYellowBold';
+       timeStyle = 'DataCellPermissionYellow';
+     } else if (isAbsent) {
+       // تظليل صف الغياب بلون التنبيه الخاص بالغياب
+       cellStyle = 'DataCellAbsent';
+       boldStyle = 'DataCellAbsentBold';
+       timeStyle = 'DataCellAbsent';
+     }
+
      const absentText = isAbsent ? 'غائب' : 'حاضر';
      const permText = getPermissionDetail(r);
      const notes = r.rejectionReason || r.notes || '---';
 
      return `
    <Row ss:Height="22">
-    <Cell ss:StyleID="DataCell"><Data ss:Type="String">${escapeXml(r.date)}</Data></Cell>
-    <Cell ss:StyleID="DataCellBold"><Data ss:Type="String">${escapeXml(r.employeeName)}</Data></Cell>
-    <Cell ss:StyleID="DataCellTime"><Data ss:Type="String">${escapeXml(r.checkInTime || '---')}</Data></Cell>
-    <Cell ss:StyleID="DataCellTime"><Data ss:Type="String">${escapeXml(r.checkOutTime || '---')}</Data></Cell>
-    <Cell ss:StyleID="${isAbsent ? 'DataCellAbsent' : 'DataCell'}"><Data ss:Type="String">${escapeXml(absentText)}</Data></Cell>
-    <Cell ss:StyleID="${hasPerm ? 'DataCellPermission' : 'DataCell'}"><Data ss:Type="String">${escapeXml(permText)}</Data></Cell>
-    <Cell ss:StyleID="DataCell"><Data ss:Type="String">${escapeXml(r.employeeCode)}</Data></Cell>
-    <Cell ss:StyleID="${isAbsent ? 'DataCellAbsent' : hasPerm ? 'DataCellPermission' : 'DataCell'}"><Data ss:Type="String">${escapeXml(getStatusArabicLabel(r.status))}</Data></Cell>
-    <Cell ss:StyleID="DataCell"><Data ss:Type="String">${escapeXml(notes)}</Data></Cell>
+    <Cell ss:StyleID="${cellStyle}"><Data ss:Type="String">${escapeXml(r.date)}</Data></Cell>
+    <Cell ss:StyleID="${boldStyle}"><Data ss:Type="String">${escapeXml(r.employeeName)}</Data></Cell>
+    <Cell ss:StyleID="${timeStyle}"><Data ss:Type="String">${escapeXml(r.checkInTime || '---')}</Data></Cell>
+    <Cell ss:StyleID="${timeStyle}"><Data ss:Type="String">${escapeXml(r.checkOutTime || '---')}</Data></Cell>
+    <Cell ss:StyleID="${cellStyle}"><Data ss:Type="String">${escapeXml(absentText)}</Data></Cell>
+    <Cell ss:StyleID="${cellStyle}"><Data ss:Type="String">${escapeXml(permText)}</Data></Cell>
+    <Cell ss:StyleID="${cellStyle}"><Data ss:Type="String">${escapeXml(r.employeeCode)}</Data></Cell>
+    <Cell ss:StyleID="${cellStyle}"><Data ss:Type="String">${escapeXml(getStatusArabicLabel(r.status))}</Data></Cell>
+    <Cell ss:StyleID="${cellStyle}"><Data ss:Type="String">${escapeXml(notes)}</Data></Cell>
    </Row>`;
    }).join('')}
   </Table>

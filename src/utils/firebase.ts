@@ -6,6 +6,7 @@ import {
   setDoc, 
   updateDoc,
   deleteDoc, 
+  deleteField,
   onSnapshot, 
   getDoc,
   getDocs,
@@ -164,8 +165,8 @@ export function subscribeToCloudEmployees(
           if (!existing) {
             employeesMap.set(codeKey, emp);
           } else {
-            // Keep the one with active device binding or preferred record
-            if (!existing.boundDeviceId && emp.boundDeviceId) {
+            // If there's a document with matching ID, prefer it over duplicates
+            if (docSnap.id === emp.id) {
               employeesMap.set(codeKey, emp);
             }
           }
@@ -200,10 +201,60 @@ export async function pushEmployeeToCloud(employee: Employee): Promise<void> {
   try {
     const cleaned = sanitizeForFirestore(employee);
     const docRef = doc(EMPLOYEES_COLLECTION_REF, employee.id);
-    await setDoc(docRef, cleaned, { merge: true });
+    if (!employee.boundDeviceId) {
+      // If boundDeviceId is not present, explicitly delete binding fields from Firestore document
+      await setDoc(
+        docRef, 
+        { 
+          ...cleaned, 
+          boundDeviceId: deleteField(), 
+          boundDeviceName: deleteField(), 
+          boundAt: deleteField() 
+        }, 
+        { merge: true }
+      );
+    } else {
+      await setDoc(docRef, cleaned, { merge: true });
+    }
   } catch (err) {
     console.error('Failed to push employee to cloud:', err);
     throw err;
+  }
+}
+
+/**
+ * Safely unbind device from employee in Cloud and remove on any duplicate documents
+ */
+export async function unbindEmployeeDeviceInCloud(
+  employeeId: string,
+  employeeCode?: string
+): Promise<void> {
+  try {
+    const docRef = doc(EMPLOYEES_COLLECTION_REF, employeeId);
+    await updateDoc(docRef, {
+      boundDeviceId: deleteField(),
+      boundDeviceName: deleteField(),
+      boundAt: deleteField(),
+    });
+  } catch (err) {
+    console.warn('Could not unbind device on employee doc:', employeeId, err);
+  }
+
+  // Also clean up any orphan/duplicate docs with that same code
+  if (employeeCode && employeeCode.trim()) {
+    try {
+      const q = query(EMPLOYEES_COLLECTION_REF, where('code', '==', employeeCode.trim()));
+      const snap = await getDocs(q);
+      for (const d of snap.docs) {
+        await updateDoc(d.ref, {
+          boundDeviceId: deleteField(),
+          boundDeviceName: deleteField(),
+          boundAt: deleteField(),
+        }).catch(() => {});
+      }
+    } catch (e) {
+      console.warn('Could not clear device on duplicate employee documents:', e);
+    }
   }
 }
 
