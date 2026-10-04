@@ -19,6 +19,7 @@ import { Employee, AttendanceRecord } from '../types';
 import { 
   exportRecordsToCSV, 
   exportRecordsToFormattedExcel, 
+  exportMultiSheetConsolidatedExcel,
   getStatusArabicLabel, 
   getPermissionDetail,
   printAttendanceReport 
@@ -221,6 +222,30 @@ export const HistoryLogs: React.FC<HistoryLogsProps> = ({
     );
   };
 
+  const handleExportConsolidatedExcel = () => {
+    let dateRangeText = 'جميع السجلات التاريخية';
+    if (startDate && endDate) {
+      dateRangeText = `من ${startDate} إلى ${endDate}`;
+    } else if (startDate) {
+      dateRangeText = `من تاريخ ${startDate}`;
+    } else if (endDate) {
+      dateRangeText = `حتى تاريخ ${endDate}`;
+    }
+
+    const targetRecords = selectedEmployeeId !== 'all' ? filteredRecords : allRecordsWithAbsence;
+    const targetEmployees = selectedEmployeeId !== 'all' 
+      ? employees.filter((e) => e.id === selectedEmployeeId) 
+      : employees;
+
+    exportMultiSheetConsolidatedExcel(
+      targetRecords,
+      targetEmployees,
+      `سجل_مجمع_شامل_${companyName.replace(/\s+/g, '_')}_${today}.xls`,
+      companyName,
+      dateRangeText
+    );
+  };
+
   const handleExportCSV = () => {
     exportRecordsToCSV(
       filteredRecords, 
@@ -260,6 +285,18 @@ export const HistoryLogs: React.FC<HistoryLogsProps> = ({
 
         {/* Export & Print Buttons */}
         <div className="flex items-center gap-2 flex-wrap print:hidden">
+          {/* Consolidated Multi-Sheet Excel Export */}
+          <button
+            id="export-consolidated-excel-btn"
+            onClick={handleExportConsolidatedExcel}
+            disabled={filteredRecords.length === 0}
+            className="inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+            title="تصدير إكسيل مجمع: أول شيت جدول إحصائيات كل موظف (حضور، تأخير، إذن، غياب) + شيت منفصل مفصل لكل موظف"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-indigo-200" />
+            <span>تصدير إكسيل مجمع (شيت لكل موظف + ملخص)</span>
+          </button>
+
           {/* Main Excel Export Button */}
           <button
             id="export-excel-btn"
@@ -269,7 +306,7 @@ export const HistoryLogs: React.FC<HistoryLogsProps> = ({
             title="تصدير جدول إكسيل منسق ومصمم باللغة العربية مع كافة الأعمدة المطلوبة"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
-            <span>تصدير إكسيل منظم (Excel)</span>
+            <span>تصدير إكسيل جدول الحركات</span>
           </button>
 
           {/* Alternative CSV Export */}
