@@ -53,23 +53,55 @@ export const HistoryLogs: React.FC<HistoryLogsProps> = ({
   const [recordToDelete, setRecordToDelete] = useState<AttendanceRecord | null>(null);
 
   // Apply Quick Date Filters
-  const applyQuickDate = (type: 'today' | 'week' | 'month' | 'all') => {
+  const applyQuickDate = (type: 'today' | 'week' | 'month' | 'prev_month' | 'all') => {
     const now = new Date();
+    const currYear = now.getFullYear();
+    const currMonth = now.getMonth();
+
     if (type === 'today') {
       setStartDate(today);
       setEndDate(today);
     } else if (type === 'week') {
       const pastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      setStartDate(pastWeek.toISOString().split('T')[0]);
+      const py = pastWeek.getFullYear();
+      const pm = String(pastWeek.getMonth() + 1).padStart(2, '0');
+      const pd = String(pastWeek.getDate()).padStart(2, '0');
+      setStartDate(`${py}-${pm}-${pd}`);
       setEndDate(today);
     } else if (type === 'month') {
-      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-      setStartDate(firstDay.toISOString().split('T')[0]);
-      setEndDate(today);
+      // Current Month: From 1st of month to today (or end of month)
+      const y = currYear;
+      const m = String(currMonth + 1).padStart(2, '0');
+      const lastDay = new Date(y, currMonth + 1, 0).getDate();
+      setStartDate(`${y}-${m}-01`);
+      setEndDate(`${y}-${m}-${String(lastDay).padStart(2, '0')}`);
+    } else if (type === 'prev_month') {
+      // Previous Month: Full previous month (1st to last day)
+      const prevDate = new Date(currYear, currMonth - 1, 1);
+      const py = prevDate.getFullYear();
+      const pm = String(prevDate.getMonth() + 1).padStart(2, '0');
+      const pLastDay = new Date(py, prevDate.getMonth() + 1, 0).getDate();
+      setStartDate(`${py}-${pm}-01`);
+      setEndDate(`${py}-${pm}-${String(pLastDay).padStart(2, '0')}`);
     } else {
       setStartDate('');
       setEndDate('');
     }
+  };
+
+  // Handle direct month picker (e.g. YYYY-MM)
+  const handleSelectMonthPicker = (monthValue: string) => {
+    if (!monthValue) {
+      setStartDate('');
+      setEndDate('');
+      return;
+    }
+    const [yStr, mStr] = monthValue.split('-');
+    const y = parseInt(yStr, 10);
+    const m = parseInt(mStr, 10);
+    const lastDay = new Date(y, m, 0).getDate();
+    setStartDate(`${yStr}-${mStr}-01`);
+    setEndDate(`${yStr}-${mStr}-${String(lastDay).padStart(2, '0')}`);
   };
 
   // Reset Filters
@@ -100,6 +132,19 @@ export const HistoryLogs: React.FC<HistoryLogsProps> = ({
         dateSet.add(`${y}-${m}-${d}`);
         curr.setDate(curr.getDate() + 1);
       }
+    } else if (startDate) {
+      // From startDate up to today
+      const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+      const [todayYear, todayMonth, todayDay] = today.split('-').map(Number);
+      const curr = new Date(startYear, startMonth - 1, startDay);
+      const end = new Date(todayYear, todayMonth - 1, todayDay);
+      while (curr <= end) {
+        const y = curr.getFullYear();
+        const m = String(curr.getMonth() + 1).padStart(2, '0');
+        const d = String(curr.getDate()).padStart(2, '0');
+        dateSet.add(`${y}-${m}-${d}`);
+        curr.setDate(curr.getDate() + 1);
+      }
     } else {
       // Collect dates from actual records
       records.forEach((r) => {
@@ -122,7 +167,12 @@ export const HistoryLogs: React.FC<HistoryLogsProps> = ({
       }
     });
 
-    const combined: AttendanceRecord[] = [...records];
+    // Start with existing records strictly bounded by the selected date filter
+    const combined: AttendanceRecord[] = records.filter((r) => {
+      if (startDate && r.date < startDate) return false;
+      if (endDate && r.date > endDate) return false;
+      return true;
+    });
 
     dateSet.forEach((dateStr) => {
       // Do not mark absence for future dates
@@ -215,41 +265,64 @@ export const HistoryLogs: React.FC<HistoryLogsProps> = ({
 
   // Export and Print Handlers
   const handleExportExcel = () => {
+    let fileDateLabel = today;
+    if (startDate && endDate && startDate.slice(0, 7) === endDate.slice(0, 7) && startDate.endsWith('-01')) {
+      fileDateLabel = `شهر_${startDate.slice(0, 7)}`;
+    } else if (startDate && endDate) {
+      fileDateLabel = `${startDate}_إلى_${endDate}`;
+    }
     exportRecordsToFormattedExcel(
       filteredRecords, 
-      `سجل_حركات_${companyName.replace(/\s+/g, '_')}_${today}.xls`,
+      `سجل_حركات_${companyName.replace(/\s+/g, '_')}_${fileDateLabel}.xls`,
       companyName
     );
   };
 
   const handleExportConsolidatedExcel = () => {
     let dateRangeText = 'جميع السجلات التاريخية';
+    let fileDateLabel = today;
+
     if (startDate && endDate) {
-      dateRangeText = `من ${startDate} إلى ${endDate}`;
+      if (startDate.slice(0, 7) === endDate.slice(0, 7) && startDate.endsWith('-01')) {
+        fileDateLabel = `شهر_${startDate.slice(0, 7)}`;
+        dateRangeText = `شهر ${startDate.slice(0, 7)} (من ${startDate} إلى ${endDate})`;
+      } else {
+        fileDateLabel = `${startDate}_إلى_${endDate}`;
+        dateRangeText = `من ${startDate} إلى ${endDate}`;
+      }
     } else if (startDate) {
       dateRangeText = `من تاريخ ${startDate}`;
+      fileDateLabel = `من_${startDate}`;
     } else if (endDate) {
       dateRangeText = `حتى تاريخ ${endDate}`;
+      fileDateLabel = `حتى_${endDate}`;
     }
 
-    const targetRecords = selectedEmployeeId !== 'all' ? filteredRecords : allRecordsWithAbsence;
+    // Always use filteredRecords to strictly follow active filters!
+    const targetRecords = filteredRecords;
     const targetEmployees = selectedEmployeeId !== 'all' 
       ? employees.filter((e) => e.id === selectedEmployeeId) 
-      : employees;
+      : employees.filter((e) => e.isActive !== false);
 
     exportMultiSheetConsolidatedExcel(
       targetRecords,
       targetEmployees,
-      `سجل_مجمع_شامل_${companyName.replace(/\s+/g, '_')}_${today}.xls`,
+      `سجل_مجمع_شامل_${companyName.replace(/\s+/g, '_')}_${fileDateLabel}.xls`,
       companyName,
       dateRangeText
     );
   };
 
   const handleExportCSV = () => {
+    let fileDateLabel = today;
+    if (startDate && endDate && startDate.slice(0, 7) === endDate.slice(0, 7) && startDate.endsWith('-01')) {
+      fileDateLabel = `شهر_${startDate.slice(0, 7)}`;
+    } else if (startDate && endDate) {
+      fileDateLabel = `${startDate}_إلى_${endDate}`;
+    }
     exportRecordsToCSV(
       filteredRecords, 
-      `سجل_حضور_${companyName.replace(/\s+/g, '_')}_${today}.csv`
+      `سجل_حضور_${companyName.replace(/\s+/g, '_')}_${fileDateLabel}.csv`
     );
   };
 
@@ -368,9 +441,19 @@ export const HistoryLogs: React.FC<HistoryLogsProps> = ({
             </button>
             <button
               onClick={() => applyQuickDate('month')}
-              className="px-3 py-1 text-xs font-medium rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+              className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors ${
+                startDate && endDate && startDate === `${today.slice(0, 7)}-01` 
+                  ? 'bg-emerald-600 text-white font-bold shadow-xs' 
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+              }`}
             >
               هذا الشهر
+            </button>
+            <button
+              onClick={() => applyQuickDate('prev_month')}
+              className="px-3 py-1 text-xs font-medium rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+            >
+              الشهر السابق
             </button>
             <button
               onClick={() => applyQuickDate('all')}
@@ -414,7 +497,22 @@ export const HistoryLogs: React.FC<HistoryLogsProps> = ({
         </div>
 
         {/* Filter Inputs Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
+          {/* Quick Month Selector */}
+          <div>
+            <label className="block text-slate-700 font-bold mb-1 flex items-center justify-between">
+              <span>تحديد شهر (سريع)</span>
+              <span className="text-[10px] text-emerald-600 font-normal">تلقائي</span>
+            </label>
+            <input
+              type="month"
+              value={startDate && endDate && startDate.slice(0, 7) === endDate.slice(0, 7) && startDate.endsWith('-01') ? startDate.slice(0, 7) : ''}
+              onChange={(e) => handleSelectMonthPicker(e.target.value)}
+              className="w-full px-3 py-2 border border-emerald-300 rounded-lg text-slate-900 bg-emerald-50/40 font-mono font-bold focus:bg-white focus:border-emerald-500"
+              title="اختر الشهر وسيتم ضبط بداية ونهاية الشهر تلقائياً"
+            />
+          </div>
+
           {/* Start Date */}
           <div>
             <label className="block text-slate-600 font-medium mb-1">من تاريخ</label>
